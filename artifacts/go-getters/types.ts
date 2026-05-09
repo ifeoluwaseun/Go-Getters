@@ -155,3 +155,13 @@ export interface TeamMember {
   evidence: Evidence[];
   phone?: string;
 }
+
+export interface TeamMessage {
+  id: string;
+  memberId: string;
+  senderId: string;
+  senderName: string;
+  content: string;
+  sentAt: string;
+  type: 'message' | 'note' | 'reminder';
+}

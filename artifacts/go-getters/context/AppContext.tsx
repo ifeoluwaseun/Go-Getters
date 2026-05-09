@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useState } from 'react';
-import { Task, Goal, Post, Meeting, Achievement, AppNotification, LeaderboardUser, WeeklyAchiever, Evidence, TeamMember } from '@/types';
+import { Task, Goal, Post, Meeting, Achievement, AppNotification, LeaderboardUser, WeeklyAchiever, Evidence, TeamMember, TeamMessage } from '@/types';
 
 interface AppContextType {
   tasks: Task[];
@@ -12,6 +12,7 @@ interface AppContextType {
   achievers: WeeklyAchiever[];
   evidence: Evidence[];
   teamMembers: TeamMember[];
+  teamMessages: Record<string, TeamMessage[]>;
   unreadCount: number;
   completeTask: (id: string) => void;
   addTask: (task: Omit<Task, 'id'>) => void;
@@ -23,6 +24,7 @@ interface AppContextType {
   addEvidence: (ev: Omit<Evidence, 'id'>) => void;
   approveEvidence: (id: string) => void;
   rejectEvidence: (id: string, feedback: string) => void;
+  sendTeamMessage: (memberId: string, content: string, senderId: string, senderName: string, type?: TeamMessage['type']) => void;
 }
 
 const AppContext = createContext<AppContextType>({} as AppContextType);
@@ -198,6 +200,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [achievers] = useState<WeeklyAchiever[]>(INITIAL_ACHIEVERS);
   const [evidence, setEvidence] = useState<Evidence[]>(INITIAL_EVIDENCE);
   const [teamMembers] = useState<TeamMember[]>(INITIAL_TEAM_MEMBERS);
+  const [teamMessages, setTeamMessages] = useState<Record<string, TeamMessage[]>>({
+    'u3': [
+      { id: 'tm1', memberId: 'u3', senderId: '2', senderName: 'Marcus Johnson', content: 'Great start to the week James! Keep that streak alive.', sentAt: new Date(Date.now() - 86400000).toISOString(), type: 'message' },
+      { id: 'tm2', memberId: 'u3', senderId: '2', senderName: 'Marcus Johnson', content: 'Remember to submit your evidence for the morning prospecting session once done.', sentAt: new Date(Date.now() - 3600000).toISOString(), type: 'reminder' },
+    ],
+    'u8': [
+      { id: 'tm3', memberId: 'u8', senderId: '2', senderName: 'Marcus Johnson', content: 'Devon, I noticed you have a couple of overdue tasks today. Let me know if you need support — I am here to help.', sentAt: new Date(Date.now() - 7200000).toISOString(), type: 'message' },
+      { id: 'tm4', memberId: 'u8', senderId: '2', senderName: 'Marcus Johnson', content: 'Consistency is built one day at a time. Let\'s get back on track together this week.', sentAt: new Date(Date.now() - 1800000).toISOString(), type: 'note' },
+    ],
+  });
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
@@ -246,8 +258,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setEvidence((prev) => prev.map((e) => e.id === id ? { ...e, status: 'rejected', feedback } : e));
   }, []);
 
+  const sendTeamMessage = useCallback((memberId: string, content: string, senderId: string, senderName: string, type: TeamMessage['type'] = 'message') => {
+    const msg: TeamMessage = {
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+      memberId,
+      senderId,
+      senderName,
+      content,
+      sentAt: new Date().toISOString(),
+      type,
+    };
+    setTeamMessages((prev) => ({
+      ...prev,
+      [memberId]: [...(prev[memberId] ?? []), msg],
+    }));
+  }, []);
+
   return (
-    <AppContext.Provider value={{ tasks, goals, posts, leaderboard, meetings, notifications, achievements, achievers, evidence, teamMembers, unreadCount, completeTask, addTask, addGoal, likePost, addPost, markNotificationRead, markAllRead, addEvidence, approveEvidence, rejectEvidence }}>
+    <AppContext.Provider value={{ tasks, goals, posts, leaderboard, meetings, notifications, achievements, achievers, evidence, teamMembers, teamMessages, unreadCount, completeTask, addTask, addGoal, likePost, addPost, markNotificationRead, markAllRead, addEvidence, approveEvidence, rejectEvidence, sendTeamMessage }}>
       {children}
     </AppContext.Provider>
   );

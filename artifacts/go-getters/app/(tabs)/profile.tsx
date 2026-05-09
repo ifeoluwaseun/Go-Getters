@@ -25,13 +25,9 @@ export default function ProfileScreen() {
   const completedTasks = tasks.filter((t) => t.status === "completed").length;
   const roleColor = ROLE_COLORS[currentUser?.role ?? "member"];
 
-  const canSeeTeam = currentUser?.role === "admin" || currentUser?.role === "leader" || currentUser?.role === "sponsor";
+  const canSeeTeam = currentUser?.role === "leader";
 
-  const myTeamCount = canSeeTeam
-    ? currentUser?.role === "admin"
-      ? teamMembers.length
-      : teamMembers.filter((m) => m.sponsorId === currentUser?.id).length
-    : 0;
+  const myTeamCount = canSeeTeam ? teamMembers.length : 0;
 
   function handleLogout() {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
@@ -62,10 +58,10 @@ export default function ProfileScreen() {
         {canSeeTeam && myTeamCount > 0 && (
           <TouchableOpacity onPress={() => router.push("/team")} activeOpacity={0.8} style={[styles.teamBanner, { backgroundColor: roleColor + "18", borderColor: roleColor + "33" }]}>
             <View style={[styles.teamBannerIcon, { backgroundColor: roleColor + "33" }]}>
-              <Ionicons name="people" size={16} color={roleColor} />
+              <Ionicons name="shield-checkmark" size={16} color={roleColor} />
             </View>
             <Text style={[styles.teamBannerText, { color: roleColor }]}>
-              {currentUser.role === "sponsor" ? "Your Recruits" : currentUser.role === "leader" ? "Your Team" : "All Members"} · {myTeamCount} {myTeamCount === 1 ? "person" : "people"}
+              My Team · {myTeamCount} {myTeamCount === 1 ? "member" : "members"}
             </Text>
             <Ionicons name="chevron-forward" size={14} color={roleColor} />
           </TouchableOpacity>
@@ -116,7 +112,7 @@ export default function ProfileScreen() {
         <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>Quick Access</Text>
         <View style={[styles.menu, { backgroundColor: colors.card, borderColor: colors.border }]}>
           {[
-            ...(canSeeTeam ? [{ label: currentUser.role === "sponsor" ? "My Recruits" : "My Team", icon: "people-outline", route: "/team", color: roleColor, badge: myTeamCount }] : []),
+            ...(canSeeTeam ? [{ label: "Team Review", icon: "people-outline", route: "/team", color: roleColor, badge: myTeamCount }] : []),
             { label: "Weekly Goals", icon: "flag-outline", route: "/goals", color: colors.primary },
             { label: "Evidence History", icon: "camera-outline", route: "/evidence", color: "#00e57d" },
             { label: "Achievers", icon: "trophy-outline", route: "/achievers", color: "#fbbf24" },
@@ -145,7 +141,7 @@ export default function ProfileScreen() {
         <Ionicons name="information-circle-outline" size={14} color={colors.mutedForeground} />
         <Text style={[styles.roleHintText, { color: colors.mutedForeground }]}>
           Signed in as <Text style={{ color: roleColor, fontFamily: "Inter_600SemiBold" }}>{ROLE_LABELS[currentUser.role]}</Text>
-          {currentUser.role === "sponsor" ? " — you can view your direct recruits' tasks, goals & evidence" : currentUser.role === "leader" ? " — you can review all team members' progress" : currentUser.role === "admin" ? " — full organization access" : ""}
+          {currentUser.role === "leader" ? " — you have full access to Team Review: tasks, goals, evidence & messaging for every member" : ""}
         </Text>
       </View>
 
