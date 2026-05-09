@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/"
+title = "Go-Getters"
+version = "1.0.0"
+id = "artifacts/go-getters"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/" ]
+localPort = 24682
+
+[services.development]
+run = "pnpm --filter @workspace/go-getters run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/go-getters", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/go-getters", "run", "serve" ]
+
+[services.env]
+PORT = "24682"
+BASE_PATH = "/"

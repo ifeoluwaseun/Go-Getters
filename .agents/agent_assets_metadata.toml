@@ -1,0 +1,14 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "Ey8Cmqblie4x5mDPLYaO3"
+uri = "file://artifacts/go-getters/assets/images/icon.png"
+type = "image"
+title = "go-getters app icon"
+
+[[generated]]
+id = "T7dpulpN47lPCsrrp-Fs1"
+uri = "file://artifacts/go-getters/assets/images/splash.png"
+type = "image"
+title = "go-getters splash screen"

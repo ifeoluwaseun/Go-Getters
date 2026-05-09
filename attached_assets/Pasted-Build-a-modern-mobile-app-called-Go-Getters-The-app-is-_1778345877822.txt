@@ -1,0 +1,531 @@
+Build a modern mobile app called “Go-Getters”.
+
+The app is a productivity, accountability, execution, and recognition platform for ambitious teams and network marketing communities.
+
+The goal of the app is to help users:
+
+* set weekly goals
+* break goals into daily tasks
+* stay accountable
+* upload proof/evidence of completed work
+* receive reminders throughout the day
+* get recognized for consistency and achievements
+* book support calls when they are struggling
+* stay connected to the community
+
+The app should feel:
+
+* motivational
+* modern
+* clean
+* energetic
+* premium
+* community-driven
+* productivity-focused
+
+Use a modern UI with:
+
+* dark + light mode support
+* clean cards
+* progress bars
+* achievement badges
+* streak indicators
+* modern mobile navigation
+* beautiful dashboard analytics
+
+User roles:
+
+1. Admin
+2. Team Leaders
+3. Members
+
+Main app sections:
+
+* Dashboard
+* Weekly Goals
+* Daily Tasks
+* Notifications
+* Evidence Uploads
+* Leaderboard
+* Weekly Achievers
+* Monthly Achievers
+* Meetings
+* Community Feed
+* Profile
+* Admin Dashboard
+
+Main functionality:
+
+* users create weekly goals
+* users break goals into daily tasks
+* users mark tasks complete
+* users upload evidence for tasks
+* admin can review evidence
+* automatic reminders for incomplete tasks
+* push notifications multiple times daily
+* automatic weekly achiever generation
+* automatic consistency tracking
+* accountability alerts for inactive users
+* emergency “book a support call” prompts
+* meeting reminders
+* streak systems
+* gamification badges
+* progress analytics
+
+The app should prioritize:
+
+* accountability
+* consistency
+* motivation
+* execution
+* recognition
+* intervention
+
+Create:
+
+* complete mobile UI
+* clean onboarding flow
+* database structure
+* authentication system
+* admin panel
+* push notification system
+* task tracking system
+* evidence submission system
+* leaderboard logic
+* role-based permissions
+
+Design inspiration:
+
+* Notion
+* Duolingo
+* Habitica
+* Asana
+* Headspace
+* Nike Run Club
+
+The overall feeling should be:
+“A high-performance execution system for ambitious people.”
+
+
+Use the existing GoGetters brand colors as the primary visual identity for the app.
+
+Create a modern, premium, motivational, high-performance mobile app design system around the existing GoGetters brand colors.
+
+#00d8fe and #444345
+
+The app should feel:
+
+* energetic
+* disciplined
+* motivating
+* achievement-driven
+* community-focused
+* modern
+* premium
+
+Use the GoGetters colors consistently across:
+
+* buttons
+* navigation
+* streak indicators
+* progress bars
+* achievement badges
+* reminders
+* dashboards
+* notifications
+* leaderboards
+
+Create a balanced color hierarchy:
+
+* primary brand color
+* secondary accent color
+* success color
+* warning color
+* error color
+* background colors
+* text colors
+
+The UI should maintain:
+
+* strong contrast
+* readability
+* clean spacing
+* modern mobile aesthetics
+
+Create both:
+
+* dark mode
+* light mode
+
+Design inspiration:
+
+* Nike Run Club
+* Notion
+* Duolingo
+* Asana
+* Linear
+
+The app should visually communicate:
+
+* execution
+* accountability
+* consistency
+* growth
+* momentum
+* recognition
+
+Avoid making the interface:
+
+* childish
+* overly playful
+* cluttered
+* corporate-looking
+
+Prioritize:
+
+* motivation
+* clarity
+* action-oriented design
+* gamified productivity
+
+Take note of the following
+
+DASHBOARD SCREEN
+
+Create the GoGetters dashboard screen.
+
+The dashboard should feel motivating and action-oriented.
+
+Sections:
+
+1. Welcome Header
+
+* user name
+* motivational greeting
+* profile picture
+
+2. Today’s Progress
+
+* daily progress bar
+* completed tasks count
+* pending tasks count
+
+3. Weekly Momentum Tracker
+
+* streak counter
+* consistency score
+* completion percentage
+
+4. Today’s Tasks
+
+* interactive checklist
+* priority indicators
+* due time
+* quick complete button
+
+5. Upcoming Meetings
+
+* countdown timer
+* join meeting button
+
+6. Achiever Spotlight
+
+* achiever photo
+* achievement badge
+* achievement description
+
+7. Leaderboard Preview
+
+* top performers
+* points
+* streaks
+
+8. Motivation Section
+
+* quote
+* encouragement
+* short productivity challenge
+
+Design should feel:
+
+* energetic
+* clean
+* premium
+* addictive
+* productivity-focused
+
+TASK & GOAL SYSTEM
+Build the Weekly Goals and Daily Tasks system for GoGetters.
+
+Features:
+
+* create weekly goals
+* break goals into daily tasks
+* set deadlines
+* set priorities
+* recurring tasks
+* progress tracking
+* daily completion percentages
+
+Each task should support:
+
+* title
+* description
+* category
+* due time
+* reminder settings
+* evidence upload
+* notes
+* completion status
+
+Statuses:
+
+* Ahead of Schedule
+* On Track
+* Falling Behind
+* Overdue
+
+Users should be able to:
+
+* drag and reorder tasks
+* reschedule tasks
+* duplicate tasks
+* archive completed tasks
+
+Design should feel smooth and mobile-first.
+
+
+SMART REMINDER SYSTEM
+Build an intelligent reminder and accountability notification system for GoGetters.
+
+The app should send reminders:
+
+* in the morning
+* midday
+* evening
+* before deadlines
+* when tasks remain incomplete
+
+Reminder tone should feel:
+
+* motivating
+* urgent
+* supportive
+* accountability-driven
+
+Examples:
+
+* “You still have 3 pending tasks today.”
+* “Finish strong.”
+* “You are falling behind schedule.”
+* “You are ahead of your goals today 🔥”
+
+Create escalation logic:
+Level 1:
+Gentle reminders
+
+Level 2:
+Accountability alerts
+
+Level 3:
+Urgent intervention prompts
+
+The system should detect:
+
+* inactivity
+* repeated incomplete tasks
+* missed meetings
+* declining consistency
+* missing evidence uploads
+
+When users struggle repeatedly:
+trigger an urgent support call popup.
+
+Popup text:
+“We noticed you may need support staying consistent. Please book an accountability call.”
+
+Include:
+
+* push notifications
+* notification settings
+* reminder scheduling
+* quiet hours
+* smart escalation rules
+
+EVIDENCE UPLOAD SYSTEM
+Build an evidence submission and verification system for GoGetters.
+
+Users should upload proof for completed tasks.
+
+Supported uploads:
+
+* screenshots
+* photos
+* PDFs
+* voice notes
+* links
+
+Examples:
+
+* pages of books read
+* proposal screenshots
+* prospecting screenshots
+* attendance proof
+* sales proof
+
+Features:
+
+* attach evidence to tasks
+* evidence review system
+* admin approval
+* rejection feedback
+* evidence history
+
+Create a clean review dashboard for admins.
+
+WEEKLY & MONTHLY ACHIEVERS
+Build the GoGetters recognition and celebration system.
+
+Weekly achievers should be generated automatically based on:
+
+* task completion rate
+* consistency
+* evidence uploads
+* streaks
+
+Weekly achievers should display:
+
+* profile picture
+* badges
+* completion stats
+* motivational title
+
+Monthly achiever categories:
+
+* Most Consistent
+* Highest Performer
+* Fastest Growth
+* Leadership Award
+* Recruitment Champion
+* Content Creator Award
+
+Create:
+
+* beautiful celebration cards
+* animated achievement screens
+* leaderboard system
+* streak system
+* reward badges
+
+The design should feel exciting and prestigious.
+
+SUPPORT CALL SYSTEM
+Build a support and accountability call booking system for GoGetters.
+
+The app should automatically detect struggling users based on:
+
+* inactivity
+* missed tasks
+* low consistency
+* repeated overdue tasks
+
+When triggered:
+show an urgent popup encouraging the user to book a support call.
+
+Features:
+
+* calendar booking
+* available time slots
+* Zoom or Google Meet integration
+* automatic reminders
+* rescheduling
+* emergency accountability sessions
+
+Tone should feel supportive but urgent.
+
+COMMUNITY & CULTURE
+Build a community and culture section for GoGetters.
+
+Features:
+
+* community feed
+* member wins
+* motivational posts
+* comments
+* reactions
+* announcements
+* event highlights
+
+The purpose is to:
+
+* strengthen team culture
+* increase motivation
+* encourage consistency
+* celebrate wins publicly
+
+The design should feel positive and energetic.
+
+MONITORING
+Build an Accountability Compliance Monitoring System for GoGetters.
+
+The system should automatically monitor:
+
+* daily goal updates
+* weekly goal updates
+* task checklist completion
+* previous day reviews
+* weekly reflections
+* consistency activity
+
+Create automated compliance checks.
+
+Daily compliance check:
+Every day at 11:00 AM:
+detect users who:
+
+* did not update daily goals
+* did not complete previous day review
+* did not update task progress
+
+Weekly compliance check:
+Every Sunday at 11:00 PM:
+detect users who:
+
+* did not submit weekly goals
+* did not review previous week
+* did not complete weekly planning
+
+Send automatic admin reports containing:
+
+* list of inactive users
+* missing activities
+* compliance percentage
+* consistency scores
+
+Admin should be able to:
+
+* send reminders
+* trigger accountability calls
+* assign follow-up
+* review user activity history
+
+Create escalation logic:
+
+* gentle reminders
+* accountability alerts
+* urgent intervention prompts
+
+Add accountability scoring based on:
+
+* consistency
+* task completion
+* planning compliance
+* evidence uploads
+* meeting attendance
+
+Design the system to feel:
+
+* proactive
+* intelligent
+* leadership-focused
+* accountability-driven
