@@ -22,8 +22,9 @@ const AuthContext = createContext<AuthContextType>({
 
 const MOCK_USERS: User[] = [
   { id: '1', name: 'Alex Rivera', email: 'admin@gogetters.app', role: 'admin', streak: 21, points: 4820, completionRate: 97, consistency: 95, joinedAt: '2024-01-15', title: 'Top Performer' },
-  { id: '2', name: 'Marcus Johnson', email: 'leader@gogetters.app', role: 'leader', streak: 14, points: 3640, completionRate: 94, consistency: 89, joinedAt: '2024-02-01', title: 'Team Leader' },
-  { id: '3', name: 'Sam Chen', email: 'member@gogetters.app', role: 'member', streak: 7, points: 2100, completionRate: 82, consistency: 77, joinedAt: '2024-03-10', title: 'Rising Star' },
+  { id: '2', name: 'Marcus Johnson', email: 'leader@gogetters.app', role: 'leader', streak: 14, points: 3640, completionRate: 94, consistency: 89, joinedAt: '2024-02-01', title: 'Team Leader', sponsorId: '1' },
+  { id: '3', name: 'Jordan Lee', email: 'sponsor@gogetters.app', role: 'sponsor', streak: 11, points: 2980, completionRate: 88, consistency: 83, joinedAt: '2024-02-15', title: 'Sponsor', sponsorId: '2' },
+  { id: '4', name: 'Sam Chen', email: 'member@gogetters.app', role: 'member', streak: 7, points: 2100, completionRate: 82, consistency: 77, joinedAt: '2024-03-10', title: 'Rising Star', sponsorId: '3' },
 ];
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -39,7 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, _password: string) => {
     const found = MOCK_USERS.find((u) => u.email.toLowerCase() === email.toLowerCase());
-    const user = found ?? MOCK_USERS[2];
+    const user = found ?? MOCK_USERS[3];
     await AsyncStorage.setItem('gg_user', JSON.stringify(user));
     setCurrentUser(user);
   }, []);
@@ -55,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       completionRate: 0,
       consistency: 0,
       joinedAt: new Date().toISOString(),
-      title: role === 'admin' ? 'Administrator' : role === 'leader' ? 'Team Leader' : 'Go-Getter',
+      title: role === 'admin' ? 'Administrator' : role === 'leader' ? 'Team Leader' : role === 'sponsor' ? 'Sponsor' : 'Go-Getter',
     };
     await AsyncStorage.setItem('gg_user', JSON.stringify(user));
     setCurrentUser(user);

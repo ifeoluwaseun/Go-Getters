@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'leader' | 'member';
+export type UserRole = 'admin' | 'leader' | 'sponsor' | 'member';
 
 export interface User {
   id: string;
@@ -12,6 +12,7 @@ export interface User {
   consistency: number;
   joinedAt: string;
   title?: string;
+  sponsorId?: string;
 }
 
 export type TaskStatus = 'pending' | 'completed' | 'overdue' | 'skipped';
@@ -131,4 +132,26 @@ export interface WeeklyAchiever {
   points: number;
   weekStart: string;
   category: string;
+}
+
+export type MemberStatus = 'active' | 'at-risk' | 'inactive';
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  sponsorId: string;
+  streak: number;
+  points: number;
+  completionRate: number;
+  consistency: number;
+  joinedAt: string;
+  title?: string;
+  lastActive: string;
+  status: MemberStatus;
+  tasks: Task[];
+  goals: Goal[];
+  evidence: Evidence[];
+  phone?: string;
 }

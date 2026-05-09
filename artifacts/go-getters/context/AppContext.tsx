@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useState } from 'react';
-import { Task, Goal, Post, Meeting, Achievement, AppNotification, LeaderboardUser, WeeklyAchiever, Evidence } from '@/types';
+import { Task, Goal, Post, Meeting, Achievement, AppNotification, LeaderboardUser, WeeklyAchiever, Evidence, TeamMember } from '@/types';
 
 interface AppContextType {
   tasks: Task[];
@@ -11,6 +11,7 @@ interface AppContextType {
   achievements: Achievement[];
   achievers: WeeklyAchiever[];
   evidence: Evidence[];
+  teamMembers: TeamMember[];
   unreadCount: number;
   completeTask: (id: string) => void;
   addTask: (task: Omit<Task, 'id'>) => void;
@@ -97,6 +98,95 @@ const INITIAL_EVIDENCE: Evidence[] = [
   { id: 'ev2', taskId: 't3', taskTitle: 'Read 10 pages of "Go-Giver"', type: 'image', description: 'Photo of today\'s reading session — pages 42-52', status: 'pending', uploadedAt: new Date(Date.now() - 7200000).toISOString(), userName: 'You' },
 ];
 
+const INITIAL_TEAM_MEMBERS: TeamMember[] = [
+  {
+    id: 'u3', name: 'James T.', email: 'james@example.com', role: 'member', sponsorId: '2', streak: 15, points: 3890, completionRate: 91, consistency: 88, joinedAt: '2024-03-01', title: 'Rising Star', lastActive: '2 hours ago', status: 'active',
+    tasks: [
+      { id: 'mt1', title: 'Morning Prospecting (10 contacts)', category: 'Prospecting', dueTime: '09:00', priority: 'high', status: 'completed', hasEvidence: true, recurring: true, date: today, completedAt: new Date().toISOString() },
+      { id: 'mt2', title: 'Follow-up calls x5', category: 'Follow-Up', dueTime: '11:00', priority: 'high', status: 'completed', hasEvidence: false, recurring: false, date: today, completedAt: new Date().toISOString() },
+      { id: 'mt3', title: 'Share daily win', category: 'Content', dueTime: '16:00', priority: 'medium', status: 'pending', hasEvidence: false, recurring: true, date: today },
+      { id: 'mt4', title: 'Read leadership book', category: 'Personal Dev', dueTime: '20:00', priority: 'medium', status: 'pending', hasEvidence: false, recurring: true, date: today },
+    ],
+    goals: [
+      { id: 'mg1', title: 'Close 5 new sales this week', description: 'Focus on warm market leads', weekStart: today, category: 'Sales', taskIds: ['mt1', 'mt2'], progress: 80, color: '#00d8fe' },
+      { id: 'mg2', title: 'Complete prospecting training', description: 'Finish the online course modules', weekStart: today, category: 'Growth', taskIds: ['mt4'], progress: 60, color: '#fbbf24' },
+    ],
+    evidence: [
+      { id: 'me1', taskId: 'mt1', taskTitle: 'Morning Prospecting', type: 'screenshot', description: 'DMs sent to 12 prospects this morning', status: 'approved', uploadedAt: new Date(Date.now() - 3600000).toISOString(), userName: 'James T.' },
+    ],
+  },
+  {
+    id: 'u2', name: 'Sarah K.', email: 'sarah@example.com', role: 'leader', sponsorId: '1', streak: 18, points: 4210, completionRate: 95, consistency: 92, joinedAt: '2024-02-10', title: 'Team Leader', lastActive: '30 min ago', status: 'active',
+    tasks: [
+      { id: 'st1', title: 'Team accountability call', category: 'Leadership', dueTime: '10:00', priority: 'high', status: 'completed', hasEvidence: true, recurring: true, date: today, completedAt: new Date().toISOString() },
+      { id: 'st2', title: 'Morning prospecting', category: 'Prospecting', dueTime: '08:00', priority: 'high', status: 'completed', hasEvidence: true, recurring: true, date: today, completedAt: new Date().toISOString() },
+      { id: 'st3', title: 'Personal development session', category: 'Personal Dev', dueTime: '13:00', priority: 'medium', status: 'pending', hasEvidence: false, recurring: true, date: today },
+    ],
+    goals: [
+      { id: 'sg1', title: 'Maintain team 90%+ completion', description: 'Support all team members daily', weekStart: today, category: 'Leadership', taskIds: ['st1'], progress: 95, color: '#a855f7' },
+      { id: 'sg2', title: 'Personal recruitment: 2 new members', description: 'Add to warm market outreach', weekStart: today, category: 'Recruitment', taskIds: ['st2'], progress: 50, color: '#00d8fe' },
+    ],
+    evidence: [
+      { id: 'se1', taskId: 'st1', taskTitle: 'Team accountability call', type: 'screenshot', description: 'Recording link of today\'s team call', status: 'approved', uploadedAt: new Date(Date.now() - 1800000).toISOString(), userName: 'Sarah K.' },
+      { id: 'se2', taskId: 'st2', taskTitle: 'Morning prospecting', type: 'link', description: 'LinkedIn outreach log — 15 messages', status: 'pending', uploadedAt: new Date(Date.now() - 7200000).toISOString(), userName: 'Sarah K.' },
+    ],
+  },
+  {
+    id: 'u7', name: 'Nina P.', email: 'nina@example.com', role: 'member', sponsorId: '3', streak: 10, points: 2950, completionRate: 86, consistency: 80, joinedAt: '2024-03-20', title: 'Go-Getter', lastActive: '1 hour ago', status: 'active',
+    tasks: [
+      { id: 'nt1', title: 'Morning prospecting', category: 'Prospecting', dueTime: '09:00', priority: 'high', status: 'completed', hasEvidence: true, recurring: true, date: today, completedAt: new Date().toISOString() },
+      { id: 'nt2', title: 'Product demo with client', category: 'Sales', dueTime: '14:00', priority: 'high', status: 'pending', hasEvidence: false, recurring: false, date: today },
+      { id: 'nt3', title: 'Post testimonial', category: 'Content', dueTime: '17:00', priority: 'medium', status: 'overdue', hasEvidence: false, recurring: false, date: today },
+    ],
+    goals: [
+      { id: 'ng1', title: 'Book 3 product demos', description: 'Target existing warm market', weekStart: today, category: 'Sales', taskIds: ['nt2'], progress: 33, color: '#00e57d' },
+    ],
+    evidence: [
+      { id: 'ne1', taskId: 'nt1', taskTitle: 'Morning prospecting', type: 'image', description: 'Photo of my contact list for today', status: 'pending', uploadedAt: new Date(Date.now() - 5400000).toISOString(), userName: 'Nina P.' },
+    ],
+  },
+  {
+    id: 'u8', name: 'Devon L.', email: 'devon@example.com', role: 'member', sponsorId: '3', streak: 3, points: 2700, completionRate: 62, consistency: 55, joinedAt: '2024-04-01', title: 'Go-Getter', lastActive: 'Yesterday', status: 'at-risk',
+    tasks: [
+      { id: 'dt1', title: 'Morning prospecting', category: 'Prospecting', dueTime: '09:00', priority: 'high', status: 'overdue', hasEvidence: false, recurring: true, date: today },
+      { id: 'dt2', title: 'Follow-up calls', category: 'Follow-Up', dueTime: '11:00', priority: 'high', status: 'overdue', hasEvidence: false, recurring: true, date: today },
+      { id: 'dt3', title: 'Evening review', category: 'Planning', dueTime: '20:00', priority: 'medium', status: 'pending', hasEvidence: false, recurring: true, date: today },
+    ],
+    goals: [
+      { id: 'dg1', title: 'Get back on track this week', description: 'Complete at least 5 tasks per day', weekStart: today, category: 'Growth', taskIds: ['dt1', 'dt2', 'dt3'], progress: 20, color: '#ef4444' },
+    ],
+    evidence: [],
+  },
+  {
+    id: 'u9', name: 'Chen W.', email: 'chen@example.com', role: 'member', sponsorId: '3', streak: 7, points: 2400, completionRate: 79, consistency: 74, joinedAt: '2024-04-10', title: 'Go-Getter', lastActive: '4 hours ago', status: 'active',
+    tasks: [
+      { id: 'ct1', title: 'Morning prospecting', category: 'Prospecting', dueTime: '09:00', priority: 'high', status: 'completed', hasEvidence: true, recurring: true, date: today, completedAt: new Date().toISOString() },
+      { id: 'ct2', title: 'Read personal dev book', category: 'Personal Dev', dueTime: '12:00', priority: 'medium', status: 'completed', hasEvidence: false, recurring: true, date: today, completedAt: new Date().toISOString() },
+      { id: 'ct3', title: 'Team training session', category: 'Leadership', dueTime: '15:00', priority: 'high', status: 'pending', hasEvidence: false, recurring: false, date: today },
+    ],
+    goals: [
+      { id: 'cg1', title: 'Build product knowledge', description: 'Complete all training modules this week', weekStart: today, category: 'Growth', taskIds: ['ct2', 'ct3'], progress: 55, color: '#a855f7' },
+    ],
+    evidence: [
+      { id: 'ce1', taskId: 'ct1', taskTitle: 'Morning prospecting', type: 'screenshot', description: 'Screenshot of 8 new LinkedIn connections today', status: 'approved', uploadedAt: new Date(Date.now() - 14400000).toISOString(), userName: 'Chen W.' },
+    ],
+  },
+  {
+    id: 'u4', name: 'Priya M.', email: 'priya@example.com', role: 'leader', sponsorId: '1', streak: 14, points: 3640, completionRate: 94, consistency: 90, joinedAt: '2024-02-20', title: 'Team Leader', lastActive: '1 hour ago', status: 'active',
+    tasks: [
+      { id: 'pt1', title: 'Morning team briefing', category: 'Leadership', dueTime: '08:30', priority: 'high', status: 'completed', hasEvidence: false, recurring: true, date: today, completedAt: new Date().toISOString() },
+      { id: 'pt2', title: 'Prospecting session', category: 'Prospecting', dueTime: '10:00', priority: 'high', status: 'completed', hasEvidence: true, recurring: true, date: today, completedAt: new Date().toISOString() },
+      { id: 'pt3', title: 'Leadership podcast', category: 'Personal Dev', dueTime: '18:00', priority: 'low', status: 'pending', hasEvidence: false, recurring: true, date: today },
+    ],
+    goals: [
+      { id: 'pg1', title: 'Lead team to 95% weekly completion', description: 'Support every member to hit their targets', weekStart: today, category: 'Leadership', taskIds: ['pt1'], progress: 90, color: '#a855f7' },
+    ],
+    evidence: [
+      { id: 'pe1', taskId: 'pt2', taskTitle: 'Prospecting session', type: 'screenshot', description: '10 warm outreach messages sent', status: 'approved', uploadedAt: new Date(Date.now() - 3600000).toISOString(), userName: 'Priya M.' },
+    ],
+  },
+];
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
   const [goals, setGoals] = useState<Goal[]>(INITIAL_GOALS);
@@ -107,6 +197,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [achievements] = useState<Achievement[]>(INITIAL_ACHIEVEMENTS);
   const [achievers] = useState<WeeklyAchiever[]>(INITIAL_ACHIEVERS);
   const [evidence, setEvidence] = useState<Evidence[]>(INITIAL_EVIDENCE);
+  const [teamMembers] = useState<TeamMember[]>(INITIAL_TEAM_MEMBERS);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
@@ -156,7 +247,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AppContext.Provider value={{ tasks, goals, posts, leaderboard, meetings, notifications, achievements, achievers, evidence, unreadCount, completeTask, addTask, addGoal, likePost, addPost, markNotificationRead, markAllRead, addEvidence, approveEvidence, rejectEvidence }}>
+    <AppContext.Provider value={{ tasks, goals, posts, leaderboard, meetings, notifications, achievements, achievers, evidence, teamMembers, unreadCount, completeTask, addTask, addGoal, likePost, addPost, markNotificationRead, markAllRead, addEvidence, approveEvidence, rejectEvidence }}>
       {children}
     </AppContext.Provider>
   );

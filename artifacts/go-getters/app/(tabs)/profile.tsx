@@ -10,20 +10,28 @@ import { ProgressBar } from "@/components/ProgressBar";
 import { AchievementBadge } from "@/components/AchievementBadge";
 import { StreakBadge } from "@/components/StreakBadge";
 
-const ROLE_LABELS = { admin: "Administrator", leader: "Team Leader", member: "Member" };
-const ROLE_COLORS = { admin: "#a855f7", leader: "#00d8fe", member: "#00e57d" };
+const ROLE_LABELS = { admin: "Administrator", leader: "Team Leader", sponsor: "Sponsor", member: "Member" };
+const ROLE_COLORS = { admin: "#a855f7", leader: "#00d8fe", sponsor: "#ff6b35", member: "#00e57d" };
 
 export default function ProfileScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { currentUser, logout } = useAuth();
-  const { achievements, tasks } = useApp();
+  const { achievements, tasks, teamMembers } = useApp();
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const botPad = Platform.OS === "web" ? 34 : insets.bottom;
 
   const completedTasks = tasks.filter((t) => t.status === "completed").length;
   const roleColor = ROLE_COLORS[currentUser?.role ?? "member"];
+
+  const canSeeTeam = currentUser?.role === "admin" || currentUser?.role === "leader" || currentUser?.role === "sponsor";
+
+  const myTeamCount = canSeeTeam
+    ? currentUser?.role === "admin"
+      ? teamMembers.length
+      : teamMembers.filter((m) => m.sponsorId === currentUser?.id).length
+    : 0;
 
   function handleLogout() {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
@@ -46,9 +54,22 @@ export default function ProfileScreen() {
           <Text style={[styles.roleText, { color: roleColor }]}>{ROLE_LABELS[currentUser.role]}</Text>
         </View>
         {currentUser.title && (
-          <Text style={[styles.title, { color: colors.mutedForeground }]}>{currentUser.title}</Text>
+          <Text style={[styles.titleText, { color: colors.mutedForeground }]}>{currentUser.title}</Text>
         )}
         <StreakBadge count={currentUser.streak} size="md" />
+
+        {/* Team summary banner for leaders/sponsors/admins */}
+        {canSeeTeam && myTeamCount > 0 && (
+          <TouchableOpacity onPress={() => router.push("/team")} activeOpacity={0.8} style={[styles.teamBanner, { backgroundColor: roleColor + "18", borderColor: roleColor + "33" }]}>
+            <View style={[styles.teamBannerIcon, { backgroundColor: roleColor + "33" }]}>
+              <Ionicons name="people" size={16} color={roleColor} />
+            </View>
+            <Text style={[styles.teamBannerText, { color: roleColor }]}>
+              {currentUser.role === "sponsor" ? "Your Recruits" : currentUser.role === "leader" ? "Your Team" : "All Members"} · {myTeamCount} {myTeamCount === 1 ? "person" : "people"}
+            </Text>
+            <Ionicons name="chevron-forward" size={14} color={roleColor} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Stats */}
@@ -71,7 +92,6 @@ export default function ProfileScreen() {
           ))}
         </View>
 
-        {/* Progress bars */}
         <View style={[styles.progressCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <ProgressBar progress={currentUser.completionRate} label="Task Completion Rate" showLabel color={colors.success} />
           <ProgressBar progress={currentUser.consistency} label="Consistency Score" showLabel color={colors.primary} />
@@ -96,6 +116,7 @@ export default function ProfileScreen() {
         <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>Quick Access</Text>
         <View style={[styles.menu, { backgroundColor: colors.card, borderColor: colors.border }]}>
           {[
+            ...(canSeeTeam ? [{ label: currentUser.role === "sponsor" ? "My Recruits" : "My Team", icon: "people-outline", route: "/team", color: roleColor, badge: myTeamCount }] : []),
             { label: "Weekly Goals", icon: "flag-outline", route: "/goals", color: colors.primary },
             { label: "Evidence History", icon: "camera-outline", route: "/evidence", color: "#00e57d" },
             { label: "Achievers", icon: "trophy-outline", route: "/achievers", color: "#fbbf24" },
@@ -108,10 +129,24 @@ export default function ProfileScreen() {
                 <Ionicons name={item.icon as any} size={18} color={item.color} />
               </View>
               <Text style={[styles.menuLabel, { color: colors.foreground }]}>{item.label}</Text>
+              {"badge" in item && (item.badge as number) > 0 && (
+                <View style={[styles.menuBadge, { backgroundColor: item.color }]}>
+                  <Text style={styles.menuBadgeText}>{item.badge}</Text>
+                </View>
+              )}
               <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
             </TouchableOpacity>
           ))}
         </View>
+      </View>
+
+      {/* Login hint for current role */}
+      <View style={[styles.roleHint, { backgroundColor: colors.muted, borderColor: colors.border, marginHorizontal: 20 }]}>
+        <Ionicons name="information-circle-outline" size={14} color={colors.mutedForeground} />
+        <Text style={[styles.roleHintText, { color: colors.mutedForeground }]}>
+          Signed in as <Text style={{ color: roleColor, fontFamily: "Inter_600SemiBold" }}>{ROLE_LABELS[currentUser.role]}</Text>
+          {currentUser.role === "sponsor" ? " — you can view your direct recruits' tasks, goals & evidence" : currentUser.role === "leader" ? " — you can review all team members' progress" : currentUser.role === "admin" ? " — full organization access" : ""}
+        </Text>
       </View>
 
       {/* Logout */}
@@ -130,7 +165,10 @@ const styles = StyleSheet.create({
   name: { fontSize: 22, fontFamily: "Inter_700Bold" },
   roleBadge: { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1 },
   roleText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  title: { fontSize: 13, fontFamily: "Inter_400Regular" },
+  titleText: { fontSize: 13, fontFamily: "Inter_400Regular" },
+  teamBanner: { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 10, marginTop: 4 },
+  teamBannerIcon: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  teamBannerText: { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" },
   section: { paddingHorizontal: 20, marginTop: 20, gap: 12 },
   sectionTitle: { fontSize: 11, fontFamily: "Inter_700Bold", letterSpacing: 0.5, textTransform: "uppercase" },
   sectionRow: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -146,6 +184,10 @@ const styles = StyleSheet.create({
   menuItem: { flexDirection: "row", alignItems: "center", padding: 16, gap: 12 },
   menuIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   menuLabel: { flex: 1, fontSize: 14, fontFamily: "Inter_500Medium" },
-  logoutBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: 14, borderWidth: 1, paddingVertical: 14, gap: 8, marginTop: 24, marginBottom: 8 },
+  menuBadge: { borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2, marginRight: 4 },
+  menuBadgeText: { color: "#fff", fontSize: 11, fontFamily: "Inter_700Bold" },
+  roleHint: { flexDirection: "row", alignItems: "flex-start", gap: 6, borderRadius: 10, borderWidth: 1, padding: 12, marginTop: 20, marginBottom: 4 },
+  roleHintText: { fontSize: 12, fontFamily: "Inter_400Regular", flex: 1, lineHeight: 18 },
+  logoutBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: 14, borderWidth: 1, paddingVertical: 14, gap: 8, marginTop: 16, marginBottom: 8 },
   logoutText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
 });

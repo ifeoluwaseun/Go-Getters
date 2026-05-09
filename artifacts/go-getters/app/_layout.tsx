@@ -33,6 +33,8 @@ function RootLayoutNav() {
       <Stack.Screen name="meetings" options={{ title: "Meetings", headerShadowVisible: false }} />
       <Stack.Screen name="notifications" options={{ title: "Notifications", headerShadowVisible: false }} />
       <Stack.Screen name="admin" options={{ title: "Admin Dashboard", headerShadowVisible: false }} />
+      <Stack.Screen name="team" options={{ title: "My Team", headerShadowVisible: false }} />
+      <Stack.Screen name="team-member" options={{ title: "Member Profile", headerShadowVisible: false }} />
     </Stack>
   );
 }

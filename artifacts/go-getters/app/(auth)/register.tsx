@@ -7,10 +7,11 @@ import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 import { UserRole } from "@/types";
 
-const ROLES: { id: UserRole; label: string; desc: string; icon: string }[] = [
-  { id: "member", label: "Member", desc: "I want to grow and execute daily", icon: "person" },
-  { id: "leader", label: "Team Leader", desc: "I lead and mentor a team", icon: "people" },
-  { id: "admin", label: "Admin", desc: "I manage the whole organization", icon: "shield" },
+const ROLES: { id: UserRole; label: string; desc: string; icon: string; color: string }[] = [
+  { id: "member", label: "Member", desc: "I want to grow and execute daily", icon: "person", color: "#00e57d" },
+  { id: "sponsor", label: "Sponsor", desc: "I recruit and support my own team", icon: "person-add", color: "#ff6b35" },
+  { id: "leader", label: "Team Leader", desc: "I lead and mentor a team of sponsors/members", icon: "people", color: "#00d8fe" },
+  { id: "admin", label: "Admin", desc: "I manage the whole organization", icon: "shield", color: "#a855f7" },
 ];
 
 export default function RegisterScreen() {
@@ -81,19 +82,31 @@ export default function RegisterScreen() {
           {ROLES.map((r) => {
             const selected = role === r.id;
             return (
-              <TouchableOpacity key={r.id} onPress={() => setRole(r.id)} activeOpacity={0.8} style={[styles.roleCard, { backgroundColor: selected ? colors.primary + "18" : colors.card, borderColor: selected ? colors.primary : colors.border }]}>
-                <View style={[styles.roleIcon, { backgroundColor: selected ? colors.primary + "22" : colors.muted }]}>
-                  <Ionicons name={r.icon as any} size={20} color={selected ? colors.primary : colors.mutedForeground} />
+              <TouchableOpacity key={r.id} onPress={() => setRole(r.id)} activeOpacity={0.8} style={[styles.roleCard, { backgroundColor: selected ? r.color + "14" : colors.card, borderColor: selected ? r.color : colors.border }]}>
+                <View style={[styles.roleIcon, { backgroundColor: selected ? r.color + "22" : colors.muted }]}>
+                  <Ionicons name={r.icon as any} size={20} color={selected ? r.color : colors.mutedForeground} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.roleName, { color: colors.foreground }]}>{r.label}</Text>
                   <Text style={[styles.roleDesc, { color: colors.mutedForeground }]}>{r.desc}</Text>
                 </View>
-                {selected && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+                {selected && <Ionicons name="checkmark-circle" size={20} color={r.color} />}
               </TouchableOpacity>
             );
           })}
         </View>
+
+        {/* Role context hint */}
+        {(role === "leader" || role === "sponsor") && (
+          <View style={[styles.hintBox, { backgroundColor: colors.primary + "12", borderColor: colors.primary + "30" }]}>
+            <Ionicons name="information-circle-outline" size={15} color={colors.primary} />
+            <Text style={[styles.hintText, { color: colors.primary }]}>
+              {role === "leader"
+                ? "As a Team Leader, you'll have access to the Team Review screen to monitor all members' tasks, goals, and evidence."
+                : "As a Sponsor, you'll be able to see and review the progress of team members you personally recruit."}
+            </Text>
+          </View>
+        )}
 
         <TouchableOpacity style={[styles.btn, { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1 }]} onPress={handleRegister} disabled={loading} activeOpacity={0.85}>
           <Text style={[styles.btnText, { color: colors.primaryForeground }]}>{loading ? "Creating account..." : "Create Account"}</Text>
@@ -120,11 +133,13 @@ const styles = StyleSheet.create({
   inputWrap: { flexDirection: "row", alignItems: "center", borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 13, gap: 10 },
   input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
   roleLabel: { fontSize: 15, fontFamily: "Inter_600SemiBold", marginBottom: 10 },
-  roles: { gap: 10, marginBottom: 24 },
+  roles: { gap: 10, marginBottom: 16 },
   roleCard: { flexDirection: "row", alignItems: "center", borderRadius: 14, borderWidth: 1.5, padding: 14, gap: 12 },
   roleIcon: { width: 40, height: 40, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   roleName: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   roleDesc: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 1 },
+  hintBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, borderRadius: 10, padding: 12, borderWidth: 1, marginBottom: 16 },
+  hintText: { fontSize: 12, fontFamily: "Inter_400Regular", flex: 1, lineHeight: 18 },
   btn: { borderRadius: 14, paddingVertical: 16, alignItems: "center", marginBottom: 16 },
   btnText: { fontSize: 16, fontFamily: "Inter_700Bold" },
   loginLink: { alignItems: "center" },
