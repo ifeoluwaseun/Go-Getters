@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/web/"
+title = "Go-Getters Web"
+version = "1.0.0"
+id = "artifacts/go-getters-web"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/web/" ]
+localPort = 22166
+
+[services.development]
+run = "pnpm --filter @workspace/go-getters-web run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/go-getters-web", "run", "build" ]
+publicDir = "artifacts/go-getters-web/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22166"
+BASE_PATH = "/web/"
