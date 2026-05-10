@@ -8,10 +8,20 @@ export default function Login() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    login(email);
+    setError("");
+    setLoading(true);
+    try {
+      await login(email, password);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -27,11 +37,11 @@ export default function Login() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-card-foreground mb-1">Email</label>
-                <Input 
-                  type="email" 
-                  value={email} 
-                  onChange={(e) => setEmail(e.target.value)} 
-                  required 
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
                   className="w-full"
                   placeholder="admin@gogetters.app"
                   data-testid="input-email"
@@ -39,11 +49,11 @@ export default function Login() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-card-foreground mb-1">Password</label>
-                <Input 
-                  type="password" 
-                  value={password} 
-                  onChange={(e) => setPassword(e.target.value)} 
-                  required 
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
                   className="w-full"
                   placeholder="••••••••"
                   data-testid="input-password"
@@ -51,8 +61,12 @@ export default function Login() {
               </div>
             </div>
 
-            <Button type="submit" className="w-full font-bold" size="lg" data-testid="button-submit">
-              Sign In
+            {error && (
+              <p className="text-sm text-red-400 text-center">{error}</p>
+            )}
+
+            <Button type="submit" className="w-full font-bold" size="lg" data-testid="button-submit" disabled={loading}>
+              {loading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
 
@@ -62,7 +76,7 @@ export default function Login() {
         </div>
 
         <div className="text-center text-xs text-muted-foreground/60 space-y-1">
-          <p>Demo Accounts (any password):</p>
+          <p>Demo Accounts (password: anypassword):</p>
           <p>admin@gogetters.app | leader@gogetters.app | member@gogetters.app</p>
         </div>
       </div>

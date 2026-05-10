@@ -1,8 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { User, UserRole, UserStatus, LeaderOption } from '@/types';
-
-export const ADMIN_CODE = 'GOGETTERS2024';
+import { User, UserRole, LeaderOption } from '@/types';
+import { api, setToken, clearToken } from '@/lib/api';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -23,159 +22,104 @@ interface AuthContextType {
     adminCode?: string,
   ) => Promise<User>;
   logout: () => Promise<void>;
-  updateUser: (updates: Partial<User>) => void;
-  approveUser: (id: string) => void;
-  rejectUser: (id: string, reason: string) => void;
+  updateUser: (updates: Partial<User>) => Promise<void>;
+  approveUser: (id: string) => Promise<void>;
+  rejectUser: (id: string, reason: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
-const MOCK_USERS: User[] = [
-  {
-    id: '1', name: 'Alex Rivera', email: 'admin@gogetters.app', role: 'admin', status: 'approved',
-    streak: 21, points: 4820, completionRate: 97, consistency: 95, joinedAt: '2024-01-15',
-    title: 'Organization Owner',
-  },
-  {
-    id: '2', name: 'Marcus Johnson', email: 'leader@gogetters.app', role: 'leader', status: 'approved',
-    leaderId: '1', leaderName: 'Alex Rivera', sponsorId: '1', sponsorName: 'Alex Rivera',
-    streak: 14, points: 3640, completionRate: 94, consistency: 89, joinedAt: '2024-02-01',
-    title: 'Team Leader',
-  },
-  {
-    id: '4', name: 'Sam Chen', email: 'member@gogetters.app', role: 'member', status: 'approved',
-    leaderId: '2', leaderName: 'Marcus Johnson', sponsorId: '2', sponsorName: 'Marcus Johnson',
-    streak: 7, points: 2100, completionRate: 82, consistency: 77, joinedAt: '2024-03-10',
-    title: 'Rising Star',
-  },
-];
-
-const PENDING_SEED: User[] = [
-  {
-    id: 'pending1', name: 'Taylor Morgan', email: 'taylor@example.com', role: 'member', status: 'pending',
-    leaderId: '2', leaderName: 'Marcus Johnson', sponsorId: '2', sponsorName: 'Marcus Johnson',
-    streak: 0, points: 0, completionRate: 0, consistency: 0, joinedAt: new Date().toISOString(),
-    title: 'Go-Getter',
-  },
-  {
-    id: 'pending2', name: 'Jordan Reed', email: 'jordan@example.com', role: 'leader', status: 'pending',
-    leaderId: '1', leaderName: 'Alex Rivera', sponsorId: '1', sponsorName: 'Alex Rivera',
-    streak: 0, points: 0, completionRate: 0, consistency: 0, joinedAt: new Date(Date.now() - 3600000).toISOString(),
-    title: 'Team Leader',
-  },
-  {
-    id: 'pending3', name: 'Riley Washington', email: 'riley@example.com', role: 'member', status: 'pending',
-    leaderId: '2', leaderName: 'Marcus Johnson', sponsorId: '1', sponsorName: 'Alex Rivera',
-    streak: 0, points: 0, completionRate: 0, consistency: 0, joinedAt: new Date(Date.now() - 7200000).toISOString(),
-    title: 'Go-Getter',
-  },
-];
-
-const INITIAL_LEADERS: LeaderOption[] = [
-  { id: '1', name: 'Alex Rivera' },
-  { id: '2', name: 'Marcus Johnson' },
-];
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [allUsers, setAllUsers] = useState<User[]>([...MOCK_USERS, ...PENDING_SEED]);
-  const [leaders, setLeaders] = useState<LeaderOption[]>(INITIAL_LEADERS);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [leaders, setLeaders] = useState<LeaderOption[]>([]);
 
   const pendingUsers = allUsers.filter((u) => u.status === 'pending');
 
+  const refreshLeaders = useCallback(async () => {
+    try {
+      const { leaders: l } = await api.get<{ leaders: LeaderOption[] }>('/users/leaders');
+      setLeaders(l);
+    } catch {}
+  }, []);
+
+  const refreshUsers = useCallback(async () => {
+    try {
+      const { users } = await api.get<{ users: User[] }>('/users');
+      setAllUsers(users);
+    } catch {}
+  }, []);
+
   useEffect(() => {
-    AsyncStorage.getItem('gg_user').then((raw) => {
-      if (raw) {
-        const parsed: User = JSON.parse(raw);
-        setCurrentUser(parsed);
-        setAllUsers((prev) => {
-          if (prev.find((u) => u.id === parsed.id)) return prev;
-          return [...prev, parsed];
-        });
+    AsyncStorage.getItem('gg_token').then(async (token) => {
+      if (!token) { setIsLoading(false); return; }
+      try {
+        const { user } = await api.get<{ user: User }>('/auth/me');
+        setCurrentUser(user);
+        await refreshLeaders();
+        if (user.role === 'admin') await refreshUsers();
+      } catch {
+        await clearToken();
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
   }, []);
 
-  const login = useCallback(async (email: string, _password: string): Promise<User> => {
-    const found = allUsers.find((u) => u.email.toLowerCase() === email.toLowerCase());
-    const user = found ?? MOCK_USERS[2];
-    await AsyncStorage.setItem('gg_user', JSON.stringify(user));
+  const login = useCallback(async (email: string, password: string): Promise<User> => {
+    const { token, user } = await api.post<{ token: string; user: User }>('/auth/login', { email, password });
+    await setToken(token);
     setCurrentUser(user);
+    await refreshLeaders();
+    if (user.role === 'admin') await refreshUsers();
     return user;
-  }, [allUsers]);
+  }, [refreshLeaders, refreshUsers]);
 
   const register = useCallback(async (
-    name: string,
-    email: string,
-    _password: string,
-    role: UserRole,
-    leaderId?: string,
-    leaderName?: string,
-    sponsorId?: string,
-    sponsorName?: string,
-    adminCode?: string,
+    name: string, email: string, password: string, role: UserRole,
+    leaderId?: string, leaderName?: string, sponsorId?: string, sponsorName?: string, adminCode?: string,
   ): Promise<User> => {
-    const isValidAdminCode = adminCode?.trim() === ADMIN_CODE;
-    const finalRole: UserRole = isValidAdminCode ? 'admin' : role;
-    const finalStatus: UserStatus = isValidAdminCode ? 'approved' : 'pending';
-
-    const user: User = {
-      id: Date.now().toString(),
-      name: name.trim(),
-      email: email.trim().toLowerCase(),
-      role: finalRole,
-      status: finalStatus,
-      streak: 0,
-      points: 0,
-      completionRate: 0,
-      consistency: 0,
-      joinedAt: new Date().toISOString(),
-      title: finalRole === 'admin' ? 'Organization Owner' : finalRole === 'leader' ? 'Team Leader' : 'Go-Getter',
-      leaderId,
-      leaderName,
-      sponsorId,
-      sponsorName,
-    };
-
-    await AsyncStorage.setItem('gg_user', JSON.stringify(user));
+    const { token, user } = await api.post<{ token: string; user: User }>('/auth/register', {
+      name, email, password, role, leaderId, leaderName, sponsorId, sponsorName, adminCode,
+    });
+    await setToken(token);
     setCurrentUser(user);
-    setAllUsers((prev) => [...prev, user]);
-
-    if (finalRole === 'leader') {
-      setLeaders((prev) => [...prev, { id: user.id, name: user.name }]);
-    }
-
+    await refreshLeaders();
     return user;
-  }, []);
+  }, [refreshLeaders]);
 
   const logout = useCallback(async () => {
-    await AsyncStorage.removeItem('gg_user');
+    try { await api.post('/auth/logout'); } catch {}
+    await clearToken();
     setCurrentUser(null);
+    setAllUsers([]);
   }, []);
 
-  const updateUser = useCallback((updates: Partial<User>) => {
-    setCurrentUser((prev) => {
-      if (!prev) return prev;
-      const next = { ...prev, ...updates };
-      AsyncStorage.setItem('gg_user', JSON.stringify(next));
-      return next;
-    });
-  }, []);
+  const updateUser = useCallback(async (updates: Partial<User>) => {
+    if (!currentUser) return;
+    const { user } = await api.patch<{ user: User }>(`/users/${currentUser.id}`, updates);
+    setCurrentUser(user);
+    await AsyncStorage.setItem('gg_cached_user', JSON.stringify(user));
+  }, [currentUser]);
 
-  const approveUser = useCallback((id: string) => {
-    setAllUsers((prev) => prev.map((u) => u.id === id ? { ...u, status: 'approved' as UserStatus } : u));
-    setCurrentUser((prev) => prev?.id === id ? { ...prev, status: 'approved' as UserStatus } : prev);
-  }, []);
+  const approveUser = useCallback(async (id: string) => {
+    const { user } = await api.post<{ user: User }>(`/users/${id}/approve`);
+    setAllUsers((prev) => prev.map((u) => u.id === id ? user : u));
+    if (currentUser?.id === id) setCurrentUser(user);
+  }, [currentUser]);
 
-  const rejectUser = useCallback((id: string, reason: string) => {
-    setAllUsers((prev) => prev.map((u) => u.id === id ? { ...u, status: 'rejected' as UserStatus, rejectionReason: reason } : u));
-    setCurrentUser((prev) => prev?.id === id ? { ...prev, status: 'rejected' as UserStatus, rejectionReason: reason } : prev);
-  }, []);
+  const rejectUser = useCallback(async (id: string, reason: string) => {
+    const { user } = await api.post<{ user: User }>(`/users/${id}/reject`, { reason });
+    setAllUsers((prev) => prev.map((u) => u.id === id ? user : u));
+    if (currentUser?.id === id) setCurrentUser(user);
+  }, [currentUser]);
 
   return (
-    <AuthContext.Provider value={{ currentUser, isLoading, allUsers, leaders, pendingUsers, login, register, logout, updateUser, approveUser, rejectUser }}>
+    <AuthContext.Provider value={{
+      currentUser, isLoading, allUsers, leaders, pendingUsers,
+      login, register, logout, updateUser, approveUser, rejectUser,
+    }}>
       {children}
     </AuthContext.Provider>
   );

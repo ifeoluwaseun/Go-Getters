@@ -26,10 +26,11 @@ import NotFound from "./pages/not-found";
 const queryClient = new QueryClient();
 
 function AppContent() {
-  const { currentUser } = useAuth();
+  const { currentUser, isLoading } = useAuth();
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
+    if (isLoading) return;
     const publicRoutes = ["/login", "/register"];
     const statusRoutes = ["/pending", "/rejected"];
 
@@ -54,34 +55,44 @@ function AppContent() {
     ) {
       setLocation("/dashboard");
     }
-  }, [currentUser, location, setLocation]);
+  }, [currentUser, isLoading, location, setLocation]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#0d0d0f] flex items-center justify-center">
+        <div className="text-[#00d8fe] text-xl font-bold animate-pulse">GO-GETTERS</div>
+      </div>
+    );
+  }
 
   return (
-    <Switch>
-      <Route path="/login" component={Login} />
-      <Route path="/register" component={Register} />
-      <Route path="/pending" component={Pending} />
-      <Route path="/rejected" component={Rejected} />
+    <AppProvider userId={currentUser?.id}>
+      <Switch>
+        <Route path="/login" component={Login} />
+        <Route path="/register" component={Register} />
+        <Route path="/pending" component={Pending} />
+        <Route path="/rejected" component={Rejected} />
 
-      <Route>
-        <Layout>
-          <Switch>
-            <Route path="/dashboard" component={Dashboard} />
-            <Route path="/tasks" component={Tasks} />
-            <Route path="/goals" component={Goals} />
-            <Route path="/evidence" component={Evidence} />
-            <Route path="/community" component={Community} />
-            <Route path="/leaderboard" component={Leaderboard} />
-            <Route path="/team/:memberId" component={TeamMember} />
-            <Route path="/team" component={Team} />
-            <Route path="/admin" component={Admin} />
-            <Route path="/notifications" component={Notifications} />
-            <Route path="/profile" component={Profile} />
-            <Route component={NotFound} />
-          </Switch>
-        </Layout>
-      </Route>
-    </Switch>
+        <Route>
+          <Layout>
+            <Switch>
+              <Route path="/dashboard" component={Dashboard} />
+              <Route path="/tasks" component={Tasks} />
+              <Route path="/goals" component={Goals} />
+              <Route path="/evidence" component={Evidence} />
+              <Route path="/community" component={Community} />
+              <Route path="/leaderboard" component={Leaderboard} />
+              <Route path="/team/:memberId" component={TeamMember} />
+              <Route path="/team" component={Team} />
+              <Route path="/admin" component={Admin} />
+              <Route path="/notifications" component={Notifications} />
+              <Route path="/profile" component={Profile} />
+              <Route component={NotFound} />
+            </Switch>
+          </Layout>
+        </Route>
+      </Switch>
+    </AppProvider>
   );
 }
 
@@ -94,11 +105,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <AppProvider>
-            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-              <AppContent />
-            </WouterRouter>
-          </AppProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <AppContent />
+          </WouterRouter>
         </AuthProvider>
         <Toaster />
       </TooltipProvider>

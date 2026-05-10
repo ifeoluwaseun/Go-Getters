@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { UserRole } from "@/context/types";
 
 export default function Register() {
-  const { register, allUsers } = useAuth();
+  const { register, leaders } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,19 +16,24 @@ export default function Register() {
   const [sponsorId, setSponsorId] = useState<string>("none");
   const [adminCode, setAdminCode] = useState("");
   const [showAdmin, setShowAdmin] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const leaders = allUsers.filter(u => u.role === 'leader' || u.role === 'admin');
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const lId = leaderId !== "none" ? leaderId : undefined;
-    const lName = lId ? leaders.find(l => l.id === lId)?.name : undefined;
-    
-    const sId = sponsorId !== "none" ? sponsorId : undefined;
-    const sName = sId ? leaders.find(l => l.id === sId)?.name : undefined;
-
-    register(name, email, role, lId, lName, sId, sName, adminCode || undefined);
+    setError("");
+    setLoading(true);
+    try {
+      const lId = leaderId !== "none" ? leaderId : undefined;
+      const lName = lId ? leaders.find(l => l.id === lId)?.name : undefined;
+      const sId = sponsorId !== "none" ? sponsorId : undefined;
+      const sName = sId ? leaders.find(l => l.id === sId)?.name : undefined;
+      await register(name, email, password, role, lId, lName, sId, sName, adminCode || undefined);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Registration failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -45,7 +50,7 @@ export default function Register() {
               <label className="block text-sm font-medium mb-1">Full Name</label>
               <Input value={name} onChange={e => setName(e.target.value)} required />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium mb-1">Email</label>
               <Input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
@@ -73,7 +78,7 @@ export default function Register() {
               <h3 className="font-semibold mb-3">Team Connections</h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Your Leader (Required)</label>
+                  <label className="block text-sm font-medium mb-1">Your Leader</label>
                   <Select value={leaderId} onValueChange={setLeaderId}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select a leader" />
@@ -86,7 +91,7 @@ export default function Register() {
                     </SelectContent>
                   </Select>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium mb-1">Your Sponsor (Optional)</label>
                   <Select value={sponsorId} onValueChange={setSponsorId}>
@@ -105,30 +110,34 @@ export default function Register() {
             </div>
 
             <div className="pt-4">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setShowAdmin(!showAdmin)}
                 className="text-xs text-muted-foreground hover:text-primary transition-colors"
               >
                 I am the organization owner
               </button>
-              
+
               {showAdmin && (
                 <div className="mt-3 animate-in fade-in zoom-in duration-200">
                   <label className="block text-sm font-medium mb-1 text-primary">Admin Code</label>
-                  <Input 
-                    type="password" 
-                    value={adminCode} 
+                  <Input
+                    type="password"
+                    value={adminCode}
                     onChange={e => setAdminCode(e.target.value)}
-                    placeholder="Enter setup code" 
+                    placeholder="Enter setup code"
                     className="border-primary/50 focus-visible:ring-primary"
                   />
                 </div>
               )}
             </div>
 
-            <Button type="submit" className="w-full font-bold mt-4" size="lg">
-              Apply Now
+            {error && (
+              <p className="text-sm text-red-400 text-center">{error}</p>
+            )}
+
+            <Button type="submit" className="w-full font-bold mt-4" size="lg" disabled={loading}>
+              {loading ? "Submitting..." : "Apply Now"}
             </Button>
           </form>
 
