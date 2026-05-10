@@ -23,8 +23,12 @@ export default function LoginScreen() {
     if (!password.trim()) { Alert.alert("Password required"); return; }
     setLoading(true);
     try {
-      await login(email.trim(), password);
-      router.replace("/(tabs)");
+      const user = await login(email.trim(), password);
+      if (user && (user.status === 'pending' || user.status === 'rejected')) {
+        router.replace("/pending-approval");
+      } else {
+        router.replace("/(tabs)");
+      }
     } catch {
       Alert.alert("Login failed", "Please check your credentials.");
     } finally {

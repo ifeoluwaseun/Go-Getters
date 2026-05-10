@@ -143,16 +143,20 @@ export default function TeamScreen() {
     );
   }
 
-  const filtered =
-    filter === "All" ? teamMembers
-    : filter === "Active" ? teamMembers.filter((m) => m.status === "active")
-    : filter === "At Risk" ? teamMembers.filter((m) => m.status === "at-risk")
-    : teamMembers.filter((m) => m.status === "inactive");
+  const visibleMembers = currentUser?.role === "admin"
+    ? teamMembers
+    : teamMembers.filter((m) => m.leaderId === currentUser?.id);
 
-  const activeCount = teamMembers.filter((m) => m.status === "active").length;
-  const atRiskCount = teamMembers.filter((m) => m.status === "at-risk").length;
-  const avgCompletion = teamMembers.length > 0 ? Math.round(teamMembers.reduce((a, m) => a + m.completionRate, 0) / teamMembers.length) : 0;
-  const pendingEvidenceTotal = teamMembers.reduce((a, m) => a + m.evidence.filter((e) => e.status === "pending").length, 0);
+  const filtered =
+    filter === "All" ? visibleMembers
+    : filter === "Active" ? visibleMembers.filter((m) => m.status === "active")
+    : filter === "At Risk" ? visibleMembers.filter((m) => m.status === "at-risk")
+    : visibleMembers.filter((m) => m.status === "inactive");
+
+  const activeCount = visibleMembers.filter((m) => m.status === "active").length;
+  const atRiskCount = visibleMembers.filter((m) => m.status === "at-risk").length;
+  const avgCompletion = visibleMembers.length > 0 ? Math.round(visibleMembers.reduce((a, m) => a + m.completionRate, 0) / visibleMembers.length) : 0;
+  const pendingEvidenceTotal = visibleMembers.reduce((a, m) => a + m.evidence.filter((e) => e.status === "pending").length, 0);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -171,11 +175,16 @@ export default function TeamScreen() {
                 <Text style={styles.bannerTitle}>Team Leader View</Text>
                 <Text style={styles.bannerSub}>Full access · review every member's tasks, goals, evidence & messages</Text>
               </View>
+              <TouchableOpacity onPress={() => router.push("/team-report")} activeOpacity={0.8}
+                style={[styles.reportBtn, { backgroundColor: colors.primary + "33" }]}>
+                <Ionicons name="bar-chart-outline" size={15} color={colors.primary} />
+                <Text style={[styles.reportBtnText, { color: colors.primary }]}>Report</Text>
+              </TouchableOpacity>
             </View>
 
             <View style={styles.overviewRow}>
               {[
-                { label: "Members", value: teamMembers.length, color: colors.primary },
+                { label: "Members", value: visibleMembers.length, color: colors.primary },
                 { label: "Active", value: activeCount, color: "#00e57d" },
                 { label: "At Risk", value: atRiskCount, color: atRiskCount > 0 ? "#fbbf24" : "#00e57d" },
                 { label: "Avg Done", value: `${avgCompletion}%`, color: colors.foreground },
@@ -229,6 +238,8 @@ const styles = StyleSheet.create({
   lockedDesc: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 22 },
   lockedBtn: { borderRadius: 14, paddingHorizontal: 28, paddingVertical: 14 },
   lockedBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  reportBtn: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7 },
+  reportBtnText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   leaderBanner: { borderRadius: 14, padding: 14, flexDirection: "row", gap: 12, alignItems: "center", marginBottom: 14 },
   bannerIcon: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   bannerTitle: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold", marginBottom: 2 },

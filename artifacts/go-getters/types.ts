@@ -1,10 +1,12 @@
-export type UserRole = 'admin' | 'leader' | 'sponsor' | 'member';
+export type UserRole = 'admin' | 'leader' | 'member';
+export type UserStatus = 'pending' | 'approved' | 'rejected';
 
 export interface User {
   id: string;
   name: string;
   email: string;
   role: UserRole;
+  status: UserStatus;
   avatar?: string;
   streak: number;
   points: number;
@@ -12,7 +14,11 @@ export interface User {
   consistency: number;
   joinedAt: string;
   title?: string;
+  leaderId?: string;
+  leaderName?: string;
   sponsorId?: string;
+  sponsorName?: string;
+  rejectionReason?: string;
 }
 
 export type TaskStatus = 'pending' | 'completed' | 'overdue' | 'skipped';
@@ -141,7 +147,8 @@ export interface TeamMember {
   name: string;
   email: string;
   role: UserRole;
-  sponsorId: string;
+  leaderId: string;
+  sponsorId?: string;
   streak: number;
   points: number;
   completionRate: number;
@@ -153,7 +160,6 @@ export interface TeamMember {
   tasks: Task[];
   goals: Goal[];
   evidence: Evidence[];
-  phone?: string;
 }
 
 export interface TeamMessage {
@@ -164,4 +170,21 @@ export interface TeamMessage {
   content: string;
   sentAt: string;
   type: 'message' | 'note' | 'reminder';
+}
+
+export interface LeaderOption {
+  id: string;
+  name: string;
+}
+
+export interface PendingUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  leaderId?: string;
+  leaderName?: string;
+  sponsorId?: string;
+  sponsorName?: string;
+  appliedAt: string;
 }

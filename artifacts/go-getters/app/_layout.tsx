@@ -27,6 +27,7 @@ function RootLayoutNav() {
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      <Stack.Screen name="pending-approval" options={{ headerShown: false }} />
       <Stack.Screen name="goals" options={{ title: "Weekly Goals", headerShadowVisible: false }} />
       <Stack.Screen name="evidence" options={{ title: "Evidence", headerShadowVisible: false }} />
       <Stack.Screen name="achievers" options={{ title: "Achievers", headerShadowVisible: false }} />
@@ -35,6 +36,7 @@ function RootLayoutNav() {
       <Stack.Screen name="admin" options={{ title: "Admin Dashboard", headerShadowVisible: false }} />
       <Stack.Screen name="team" options={{ title: "My Team", headerShadowVisible: false }} />
       <Stack.Screen name="team-member" options={{ title: "Member Profile", headerShadowVisible: false }} />
+      <Stack.Screen name="team-report" options={{ title: "Weekly Report", headerShadowVisible: false }} />
     </Stack>
   );
 }

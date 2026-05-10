@@ -102,7 +102,7 @@ const INITIAL_EVIDENCE: Evidence[] = [
 
 const INITIAL_TEAM_MEMBERS: TeamMember[] = [
   {
-    id: 'u3', name: 'James T.', email: 'james@example.com', role: 'member', sponsorId: '2', streak: 15, points: 3890, completionRate: 91, consistency: 88, joinedAt: '2024-03-01', title: 'Rising Star', lastActive: '2 hours ago', status: 'active',
+    id: 'u3', name: 'James T.', email: 'james@example.com', role: 'member', leaderId: '2', sponsorId: '2', streak: 15, points: 3890, completionRate: 91, consistency: 88, joinedAt: '2024-03-01', title: 'Rising Star', lastActive: '2 hours ago', status: 'active',
     tasks: [
       { id: 'mt1', title: 'Morning Prospecting (10 contacts)', category: 'Prospecting', dueTime: '09:00', priority: 'high', status: 'completed', hasEvidence: true, recurring: true, date: today, completedAt: new Date().toISOString() },
       { id: 'mt2', title: 'Follow-up calls x5', category: 'Follow-Up', dueTime: '11:00', priority: 'high', status: 'completed', hasEvidence: false, recurring: false, date: today, completedAt: new Date().toISOString() },
@@ -118,7 +118,7 @@ const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     ],
   },
   {
-    id: 'u2', name: 'Sarah K.', email: 'sarah@example.com', role: 'leader', sponsorId: '1', streak: 18, points: 4210, completionRate: 95, consistency: 92, joinedAt: '2024-02-10', title: 'Team Leader', lastActive: '30 min ago', status: 'active',
+    id: 'u2', name: 'Sarah K.', email: 'sarah@example.com', role: 'leader', leaderId: '1', sponsorId: '1', streak: 18, points: 4210, completionRate: 95, consistency: 92, joinedAt: '2024-02-10', title: 'Team Leader', lastActive: '30 min ago', status: 'active',
     tasks: [
       { id: 'st1', title: 'Team accountability call', category: 'Leadership', dueTime: '10:00', priority: 'high', status: 'completed', hasEvidence: true, recurring: true, date: today, completedAt: new Date().toISOString() },
       { id: 'st2', title: 'Morning prospecting', category: 'Prospecting', dueTime: '08:00', priority: 'high', status: 'completed', hasEvidence: true, recurring: true, date: today, completedAt: new Date().toISOString() },
@@ -134,7 +134,7 @@ const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     ],
   },
   {
-    id: 'u7', name: 'Nina P.', email: 'nina@example.com', role: 'member', sponsorId: '3', streak: 10, points: 2950, completionRate: 86, consistency: 80, joinedAt: '2024-03-20', title: 'Go-Getter', lastActive: '1 hour ago', status: 'active',
+    id: 'u7', name: 'Nina P.', email: 'nina@example.com', role: 'member', leaderId: '2', sponsorId: '2', streak: 10, points: 2950, completionRate: 86, consistency: 80, joinedAt: '2024-03-20', title: 'Go-Getter', lastActive: '1 hour ago', status: 'active',
     tasks: [
       { id: 'nt1', title: 'Morning prospecting', category: 'Prospecting', dueTime: '09:00', priority: 'high', status: 'completed', hasEvidence: true, recurring: true, date: today, completedAt: new Date().toISOString() },
       { id: 'nt2', title: 'Product demo with client', category: 'Sales', dueTime: '14:00', priority: 'high', status: 'pending', hasEvidence: false, recurring: false, date: today },
@@ -148,7 +148,7 @@ const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     ],
   },
   {
-    id: 'u8', name: 'Devon L.', email: 'devon@example.com', role: 'member', sponsorId: '3', streak: 3, points: 2700, completionRate: 62, consistency: 55, joinedAt: '2024-04-01', title: 'Go-Getter', lastActive: 'Yesterday', status: 'at-risk',
+    id: 'u8', name: 'Devon L.', email: 'devon@example.com', role: 'member', leaderId: '2', sponsorId: '2', streak: 3, points: 2700, completionRate: 62, consistency: 55, joinedAt: '2024-04-01', title: 'Go-Getter', lastActive: 'Yesterday', status: 'at-risk',
     tasks: [
       { id: 'dt1', title: 'Morning prospecting', category: 'Prospecting', dueTime: '09:00', priority: 'high', status: 'overdue', hasEvidence: false, recurring: true, date: today },
       { id: 'dt2', title: 'Follow-up calls', category: 'Follow-Up', dueTime: '11:00', priority: 'high', status: 'overdue', hasEvidence: false, recurring: true, date: today },
@@ -160,7 +160,7 @@ const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     evidence: [],
   },
   {
-    id: 'u9', name: 'Chen W.', email: 'chen@example.com', role: 'member', sponsorId: '3', streak: 7, points: 2400, completionRate: 79, consistency: 74, joinedAt: '2024-04-10', title: 'Go-Getter', lastActive: '4 hours ago', status: 'active',
+    id: 'u9', name: 'Chen W.', email: 'chen@example.com', role: 'member', leaderId: '2', sponsorId: '2', streak: 7, points: 2400, completionRate: 79, consistency: 74, joinedAt: '2024-04-10', title: 'Go-Getter', lastActive: '4 hours ago', status: 'active',
     tasks: [
       { id: 'ct1', title: 'Morning prospecting', category: 'Prospecting', dueTime: '09:00', priority: 'high', status: 'completed', hasEvidence: true, recurring: true, date: today, completedAt: new Date().toISOString() },
       { id: 'ct2', title: 'Read personal dev book', category: 'Personal Dev', dueTime: '12:00', priority: 'medium', status: 'completed', hasEvidence: false, recurring: true, date: today, completedAt: new Date().toISOString() },
@@ -174,7 +174,7 @@ const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     ],
   },
   {
-    id: 'u4', name: 'Priya M.', email: 'priya@example.com', role: 'leader', sponsorId: '1', streak: 14, points: 3640, completionRate: 94, consistency: 90, joinedAt: '2024-02-20', title: 'Team Leader', lastActive: '1 hour ago', status: 'active',
+    id: 'u4', name: 'Priya M.', email: 'priya@example.com', role: 'leader', leaderId: '1', sponsorId: '1', streak: 14, points: 3640, completionRate: 94, consistency: 90, joinedAt: '2024-02-20', title: 'Team Leader', lastActive: '1 hour ago', status: 'active',
     tasks: [
       { id: 'pt1', title: 'Morning team briefing', category: 'Leadership', dueTime: '08:30', priority: 'high', status: 'completed', hasEvidence: false, recurring: true, date: today, completedAt: new Date().toISOString() },
       { id: 'pt2', title: 'Prospecting session', category: 'Prospecting', dueTime: '10:00', priority: 'high', status: 'completed', hasEvidence: true, recurring: true, date: today, completedAt: new Date().toISOString() },

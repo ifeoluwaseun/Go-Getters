@@ -16,6 +16,9 @@ export default function Index() {
   }
 
   if (!currentUser) return <Redirect href="/(auth)/onboarding" />;
+  if (currentUser.status === 'pending' || currentUser.status === 'rejected') {
+    return <Redirect href="/pending-approval" />;
+  }
   return <Redirect href="/(tabs)" />;
 }
 
