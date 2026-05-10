@@ -56,7 +56,7 @@ export default function Dashboard() {
           {/* Tasks Preview */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xl">Today's Targets</CardTitle>
+              <CardTitle className="text-xl">Today's Tasks</CardTitle>
               <Link href="/tasks" className="text-sm text-primary hover:underline font-medium">View All</Link>
             </CardHeader>
             <CardContent>

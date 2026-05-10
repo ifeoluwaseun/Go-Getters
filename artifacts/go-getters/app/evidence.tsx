@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useApp } from "@/context/AppContext";
+import { useAuth } from "@/context/AuthContext";
 import { Evidence, EvidenceType } from "@/types";
 
 const STATUS_CONFIG: Record<Evidence["status"], { label: string; color: string; icon: string }> = {
@@ -33,6 +34,7 @@ export default function EvidenceScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { evidence, tasks, addEvidence } = useApp();
+  const { currentUser } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [desc, setDesc] = useState("");
   const [link, setLink] = useState("");
