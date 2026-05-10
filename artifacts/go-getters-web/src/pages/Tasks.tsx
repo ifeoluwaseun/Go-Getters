@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CheckCircle2, Circle, Clock, Flame, AlertCircle, Plus } from "lucide-react";
+import { CheckCircle2, Circle, Clock, Flame, AlertCircle, Plus, Flag } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
@@ -29,7 +29,7 @@ interface EvidenceForm {
 }
 
 export default function Tasks() {
-  const { tasks, completeTask, addEvidence, addTask } = useApp();
+  const { tasks, goals, completeTask, addEvidence, addTask } = useApp();
   const { currentUser } = useAuth();
   const [filter, setFilter] = useState<"all" | "pending" | "completed" | "overdue">("all");
 
@@ -37,6 +37,7 @@ export default function Tasks() {
   const [showAdd, setShowAdd] = useState(false);
   const [addCategory, setAddCategory] = useState("Prospecting");
   const [addPriority, setAddPriority] = useState<Priority>("medium");
+  const [addGoalId, setAddGoalId] = useState<string>("");
   const [addLoading, setAddLoading] = useState(false);
   const { register: regTask, handleSubmit: hsTask, reset: resetTask } = useForm<AddTaskForm>();
 
@@ -44,8 +45,7 @@ export default function Tasks() {
   const [evidenceTaskId, setEvidenceTaskId] = useState<string | null>(null);
   const [evType, setEvType] = useState<EvidenceForm["type"]>("screenshot");
   const [evLoading, setEvLoading] = useState(false);
-  const { register: regEv, handleSubmit: hsEv, watch: watchEv, reset: resetEv } = useForm<EvidenceForm>({ defaultValues: { type: "screenshot" } });
-  const evTypeWatched = watchEv("type");
+  const { register: regEv, handleSubmit: hsEv, reset: resetEv } = useForm<EvidenceForm>({ defaultValues: { type: "screenshot" } });
 
   const today = new Date().toISOString().split("T")[0];
   const todayTasks = tasks.filter(t => t.date === today);
@@ -58,6 +58,11 @@ export default function Tasks() {
   const overdue = filteredTasks.filter(t => t.status === "overdue");
   const pending = filteredTasks.filter(t => t.status === "pending");
   const completed = filteredTasks.filter(t => t.status === "completed");
+
+  function getGoalForTask(task: Task) {
+    if (!task.goalId) return null;
+    return goals.find(g => g.id === task.goalId) ?? null;
+  }
 
   async function onAddTask(data: AddTaskForm) {
     if (!data.title.trim()) return;
@@ -72,10 +77,12 @@ export default function Tasks() {
         hasEvidence: false,
         recurring: false,
         date: today,
+        goalId: addGoalId || undefined,
       });
       resetTask();
       setAddCategory("Prospecting");
       setAddPriority("medium");
+      setAddGoalId("");
       setShowAdd(false);
     } finally {
       setAddLoading(false);
@@ -83,7 +90,7 @@ export default function Tasks() {
   }
 
   async function onSubmitEvidence(data: EvidenceForm) {
-    const task = tasks.find(t => t.id === (data.taskId || evidenceTaskId));
+    const task = tasks.find(t => t.id === evidenceTaskId);
     if (!task) return;
     setEvLoading(true);
     try {
@@ -105,108 +112,120 @@ export default function Tasks() {
     }
   }
 
-  const TaskCard = ({ task }: { task: Task }) => (
-    <Card className={`overflow-hidden transition-all duration-200 ${
-      task.status === "completed" ? "opacity-70" : ""
-    } ${task.status === "overdue" ? "border-destructive/50 bg-destructive/5" : ""}`}>
-      <CardContent className="p-4 sm:p-6 flex items-start gap-4">
-        <button
-          onClick={() => task.status !== "completed" && completeTask(task.id)}
-          className={`mt-0.5 flex-shrink-0 transition-colors ${
-            task.status === "completed" ? "text-green-500" : "text-muted-foreground hover:text-primary"
-          }`}
-          disabled={task.status === "completed"}
-        >
-          {task.status === "completed" ? <CheckCircle2 size={24} /> : <Circle size={24} />}
-        </button>
+  const TaskCard = ({ task }: { task: Task }) => {
+    const linkedGoal = getGoalForTask(task);
+    return (
+      <Card className={`overflow-hidden transition-all duration-200 ${
+        task.status === "completed" ? "opacity-70" : ""
+      } ${task.status === "overdue" ? "border-destructive/50 bg-destructive/5" : ""}`}>
+        <CardContent className="p-4 sm:p-6 flex items-start gap-4">
+          <button
+            onClick={() => task.status !== "completed" && completeTask(task.id)}
+            className={`mt-0.5 flex-shrink-0 transition-colors ${
+              task.status === "completed" ? "text-green-500" : "text-muted-foreground hover:text-primary"
+            }`}
+            disabled={task.status === "completed"}
+          >
+            {task.status === "completed" ? <CheckCircle2 size={24} /> : <Circle size={24} />}
+          </button>
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-sm uppercase tracking-wider ${
-              task.priority === "high" ? "bg-red-500/20 text-red-500" :
-              task.priority === "medium" ? "bg-yellow-500/20 text-yellow-500" :
-              "bg-gray-500/20 text-gray-500"
-            }`}>
-              {task.priority}
-            </span>
-            <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-sm font-medium">
-              {task.category}
-            </span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-sm uppercase tracking-wider ${
+                task.priority === "high" ? "bg-red-500/20 text-red-500" :
+                task.priority === "medium" ? "bg-yellow-500/20 text-yellow-500" :
+                "bg-gray-500/20 text-gray-500"
+              }`}>
+                {task.priority}
+              </span>
+              <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-sm font-medium">
+                {task.category}
+              </span>
+              {linkedGoal && (
+                <span
+                  className="text-xs px-2 py-0.5 rounded-sm font-medium flex items-center gap-1"
+                  style={{ backgroundColor: linkedGoal.color + "22", color: linkedGoal.color }}
+                >
+                  <Flag size={10} />
+                  {linkedGoal.title.length > 22 ? linkedGoal.title.slice(0, 22) + "…" : linkedGoal.title}
+                </span>
+              )}
+            </div>
+
+            <h3 className={`font-bold text-lg mb-1 truncate ${task.status === "completed" ? "line-through text-muted-foreground" : ""}`}>
+              {task.title}
+            </h3>
+
+            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+              {task.dueTime && (
+                <div className="flex items-center gap-1">
+                  <Clock size={14} />
+                  <span className={task.status === "overdue" ? "text-destructive font-bold" : ""}>{task.dueTime}</span>
+                </div>
+              )}
+              {task.recurring && (
+                <div className="flex items-center gap-1 text-orange-500">
+                  <Flame size={14} />
+                  Daily
+                </div>
+              )}
+            </div>
           </div>
 
-          <h3 className={`font-bold text-lg mb-1 truncate ${task.status === "completed" ? "line-through text-muted-foreground" : ""}`}>
-            {task.title}
-          </h3>
-
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            {task.dueTime && (
-              <div className="flex items-center gap-1">
-                <Clock size={14} />
-                <span className={task.status === "overdue" ? "text-destructive font-bold" : ""}>{task.dueTime}</span>
-              </div>
-            )}
-            {task.recurring && (
-              <div className="flex items-center gap-1 text-orange-500">
-                <Flame size={14} />
-                Daily
-              </div>
-            )}
-          </div>
-        </div>
-
-        {task.status === "completed" && !task.hasEvidence && (
-          <Dialog open={evidenceTaskId === task.id} onOpenChange={(o) => { setEvidenceTaskId(o ? task.id : null); if (!o) resetEv(); }}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm" className="hidden sm:flex flex-shrink-0">Add Proof</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Submit Evidence for "{task.title}"</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={hsEv(onSubmitEvidence)} className="space-y-4 pt-2">
-                <div className="space-y-1.5">
-                  <Label>Evidence Type</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(["screenshot", "link", "image"] as const).map(t => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setEvType(t)}
-                        className={`border rounded-md py-2 text-sm font-semibold transition-colors ${
-                          evType === t ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/50"
-                        }`}
-                      >
-                        {t.charAt(0).toUpperCase() + t.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {evType === "link" && (
+          {task.status === "completed" && !task.hasEvidence && (
+            <Dialog open={evidenceTaskId === task.id} onOpenChange={(o) => { setEvidenceTaskId(o ? task.id : null); if (!o) resetEv(); }}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" className="hidden sm:flex flex-shrink-0">Add Proof</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Submit Evidence for "{task.title}"</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={hsEv(onSubmitEvidence)} className="space-y-4 pt-2">
                   <div className="space-y-1.5">
-                    <Label htmlFor="ev-link">Link URL</Label>
-                    <Input id="ev-link" placeholder="https://" {...regEv("link")} />
+                    <Label>Evidence Type</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(["screenshot", "link", "image"] as const).map(t => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setEvType(t)}
+                          className={`border rounded-md py-2 text-sm font-semibold transition-colors ${
+                            evType === t ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/50"
+                          }`}
+                        >
+                          {t.charAt(0).toUpperCase() + t.slice(1)}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                )}
-                {(evType === "screenshot" || evType === "image") && (
+                  {evType === "link" && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="ev-link">Link URL</Label>
+                      <Input id="ev-link" placeholder="https://" {...regEv("link")} />
+                    </div>
+                  )}
+                  {(evType === "screenshot" || evType === "image") && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="ev-url">Image URL (optional)</Label>
+                      <Input id="ev-url" placeholder="https://..." {...regEv("link")} />
+                    </div>
+                  )}
                   <div className="space-y-1.5">
-                    <Label htmlFor="ev-url">Image URL (optional)</Label>
-                    <Input id="ev-url" placeholder="https://..." {...regEv("link")} />
+                    <Label htmlFor="ev-desc">Description</Label>
+                    <Input id="ev-desc" placeholder="Describe what you accomplished..." {...regEv("description", { required: true })} />
                   </div>
-                )}
-                <div className="space-y-1.5">
-                  <Label htmlFor="ev-desc">Description</Label>
-                  <Input id="ev-desc" placeholder="Describe what you accomplished..." {...regEv("description", { required: true })} />
-                </div>
-                <Button type="submit" className="w-full font-bold" disabled={evLoading}>
-                  {evLoading ? "Submitting..." : "Submit for Review"}
-                </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
-        )}
-      </CardContent>
-    </Card>
-  );
+                  <Button type="submit" className="w-full font-bold" disabled={evLoading}>
+                    {evLoading ? "Submitting..." : "Submit for Review"}
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -216,7 +235,7 @@ export default function Tasks() {
           <p className="text-muted-foreground">Execute your plan. Protect your streak.</p>
         </div>
 
-        <Dialog open={showAdd} onOpenChange={setShowAdd}>
+        <Dialog open={showAdd} onOpenChange={(o) => { setShowAdd(o); if (!o) { resetTask(); setAddGoalId(""); } }}>
           <DialogTrigger asChild>
             <Button className="font-bold gap-2">
               <Plus size={18} /> Add Task
@@ -287,6 +306,36 @@ export default function Tasks() {
                   ))}
                 </div>
               </div>
+
+              {goals.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label>Link to Goal <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                  <div className="flex flex-col gap-1 max-h-32 overflow-y-auto border border-border rounded-md p-2">
+                    <button
+                      type="button"
+                      onClick={() => setAddGoalId("")}
+                      className={`text-left text-sm px-3 py-1.5 rounded-md transition-colors ${
+                        addGoalId === "" ? "bg-muted text-foreground font-medium" : "text-muted-foreground hover:bg-muted/50"
+                      }`}
+                    >
+                      None
+                    </button>
+                    {goals.map(g => (
+                      <button
+                        key={g.id}
+                        type="button"
+                        onClick={() => setAddGoalId(g.id)}
+                        className={`text-left text-sm px-3 py-1.5 rounded-md transition-colors flex items-center gap-2 ${
+                          addGoalId === g.id ? "bg-primary/10 text-primary font-medium" : "text-foreground hover:bg-muted/50"
+                        }`}
+                      >
+                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: g.color }} />
+                        <span className="truncate">{g.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <Button type="submit" className="w-full font-bold" disabled={addLoading}>
                 {addLoading ? "Adding..." : "Add Task"}

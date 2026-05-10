@@ -22,13 +22,15 @@ const CATEGORIES = ["Prospecting", "Follow-Up", "Personal Dev", "Leadership", "C
 export default function TasksScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { tasks, completeTask, addTask } = useApp();
+  const { tasks, goals, completeTask, addTask } = useApp();
   const [filter, setFilter] = useState<Filter>("Today");
   const [showModal, setShowModal] = useState(false);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Prospecting");
   const [priority, setPriority] = useState<TaskPriority>("medium");
   const [dueTime, setDueTime] = useState("");
+  const [selectedGoalId, setSelectedGoalId] = useState<string>("");
+  const [showGoalPicker, setShowGoalPicker] = useState(false);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const botPad = Platform.OS === "web" ? 34 : insets.bottom;
@@ -48,12 +50,25 @@ export default function TasksScreen() {
   const completed = filtered.filter((t) => t.status === "completed");
   const completedPct = filtered.length > 0 ? Math.round((completed.length / filtered.length) * 100) : 0;
 
+  const selectedGoal = goals.find(g => g.id === selectedGoalId);
+
   function handleAdd() {
     if (!title.trim()) return;
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    addTask({ title: title.trim(), category, priority, dueTime: dueTime || undefined, status: "pending", hasEvidence: false, recurring: false, date: today });
+    addTask({
+      title: title.trim(),
+      category,
+      priority,
+      dueTime: dueTime || undefined,
+      status: "pending",
+      hasEvidence: false,
+      recurring: false,
+      date: today,
+      goalId: selectedGoalId || undefined,
+    });
     setTitle("");
     setDueTime("");
+    setSelectedGoalId("");
     setShowModal(false);
   }
 
@@ -65,7 +80,22 @@ export default function TasksScreen() {
         {items.length === 0 ? (
           <Text style={[styles.emptyMsg, { color: colors.mutedForeground }]}>{emptyMsg}</Text>
         ) : (
-          items.map((t) => <TaskCard key={t.id} task={t} onComplete={completeTask} />)
+          items.map((t) => {
+            const linkedGoal = goals.find(g => g.id === t.goalId);
+            return (
+              <View key={t.id}>
+                <TaskCard task={t} onComplete={completeTask} />
+                {linkedGoal && (
+                  <View style={[styles.goalBadge, { backgroundColor: linkedGoal.color + "22", borderColor: linkedGoal.color + "44" }]}>
+                    <Ionicons name="flag" size={10} color={linkedGoal.color} />
+                    <Text style={[styles.goalBadgeText, { color: linkedGoal.color }]} numberOfLines={1}>
+                      {linkedGoal.title}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            );
+          })
         )}
       </View>
     );
@@ -147,6 +177,53 @@ export default function TasksScreen() {
                   ))}
                 </View>
               </View>
+
+              {/* Link to Goal */}
+              {goals.length > 0 && (
+                <View style={styles.field}>
+                  <Text style={[styles.fieldLabel, { color: colors.foreground }]}>
+                    Link to Goal <Text style={{ color: colors.mutedForeground, fontFamily: "Inter_400Regular" }}>(optional)</Text>
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setShowGoalPicker(!showGoalPicker)}
+                    style={[styles.goalSelector, { backgroundColor: colors.muted, borderColor: selectedGoal ? selectedGoal.color : colors.border }]}
+                    activeOpacity={0.8}
+                  >
+                    {selectedGoal ? (
+                      <View style={styles.selectedGoal}>
+                        <View style={[styles.goalDot, { backgroundColor: selectedGoal.color }]} />
+                        <Text style={[styles.goalSelectorText, { color: colors.foreground }]} numberOfLines={1}>{selectedGoal.title}</Text>
+                      </View>
+                    ) : (
+                      <Text style={[styles.goalSelectorText, { color: colors.mutedForeground }]}>Select a goal...</Text>
+                    )}
+                    <Ionicons name={showGoalPicker ? "chevron-up" : "chevron-down"} size={16} color={colors.mutedForeground} />
+                  </TouchableOpacity>
+
+                  {showGoalPicker && (
+                    <View style={[styles.goalDropdown, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                      <TouchableOpacity
+                        onPress={() => { setSelectedGoalId(""); setShowGoalPicker(false); }}
+                        style={[styles.goalOption, { backgroundColor: !selectedGoalId ? colors.muted : "transparent" }]}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.goalOptionText, { color: colors.mutedForeground }]}>None</Text>
+                      </TouchableOpacity>
+                      {goals.map(g => (
+                        <TouchableOpacity
+                          key={g.id}
+                          onPress={() => { setSelectedGoalId(g.id); setShowGoalPicker(false); }}
+                          style={[styles.goalOption, { backgroundColor: selectedGoalId === g.id ? g.color + "22" : "transparent" }]}
+                          activeOpacity={0.7}
+                        >
+                          <View style={[styles.goalDot, { backgroundColor: g.color }]} />
+                          <Text style={[styles.goalOptionText, { color: colors.foreground }]} numberOfLines={1}>{g.title}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              )}
             </ScrollView>
 
             <TouchableOpacity style={[styles.addBtn, { backgroundColor: colors.primary }]} onPress={handleAdd} activeOpacity={0.85}>
@@ -172,6 +249,8 @@ const styles = StyleSheet.create({
   group: { gap: 4, marginBottom: 8 },
   groupTitle: { fontSize: 12, fontFamily: "Inter_700Bold", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 4 },
   emptyMsg: { fontSize: 13, fontFamily: "Inter_400Regular", paddingVertical: 8 },
+  goalBadge: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, alignSelf: "flex-start", marginTop: -4, marginBottom: 6, marginLeft: 4 },
+  goalBadgeText: { fontSize: 10, fontFamily: "Inter_600SemiBold", maxWidth: 200 },
   fab: { position: "absolute", right: 20, width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8 },
   modal: { flex: 1, padding: 24, gap: 0 },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 24 },
@@ -186,6 +265,13 @@ const styles = StyleSheet.create({
   categoryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   categoryChip: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1 },
   categoryText: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  goalSelector: { borderRadius: 12, borderWidth: 1, padding: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  selectedGoal: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
+  goalDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
+  goalSelectorText: { fontSize: 15, fontFamily: "Inter_400Regular", flex: 1 },
+  goalDropdown: { borderRadius: 12, borderWidth: 1, marginTop: 4, overflow: "hidden" },
+  goalOption: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 12 },
+  goalOptionText: { fontSize: 14, fontFamily: "Inter_400Regular", flex: 1 },
   addBtn: { borderRadius: 14, paddingVertical: 16, alignItems: "center", marginTop: 8 },
   addText: { fontSize: 16, fontFamily: "Inter_700Bold" },
 });
