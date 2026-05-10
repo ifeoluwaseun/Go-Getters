@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { Task } from "@/context/types";
@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CheckCircle2, Circle, Clock, Flame, AlertCircle, Plus, Flag } from "lucide-react";
+import { CheckCircle2, Circle, Clock, Flame, AlertCircle, Plus, Flag, Upload, X, ImageIcon } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
@@ -22,8 +22,6 @@ interface AddTaskForm {
 }
 
 interface EvidenceForm {
-  taskId: string;
-  type: "screenshot" | "link" | "image";
   description: string;
   link: string;
 }
@@ -43,9 +41,12 @@ export default function Tasks() {
 
   // Evidence dialog state
   const [evidenceTaskId, setEvidenceTaskId] = useState<string | null>(null);
-  const [evType, setEvType] = useState<EvidenceForm["type"]>("screenshot");
+  const [evType, setEvType] = useState<"screenshot" | "link" | "image">("screenshot");
   const [evLoading, setEvLoading] = useState(false);
-  const { register: regEv, handleSubmit: hsEv, reset: resetEv } = useForm<EvidenceForm>({ defaultValues: { type: "screenshot" } });
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [uploadedFileName, setUploadedFileName] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { register: regEv, handleSubmit: hsEv, reset: resetEv } = useForm<EvidenceForm>();
 
   const today = new Date().toISOString().split("T")[0];
   const todayTasks = tasks.filter(t => t.date === today);
@@ -62,6 +63,25 @@ export default function Tasks() {
   function getGoalForTask(task: Task) {
     if (!task.goalId) return null;
     return goals.find(g => g.id === task.goalId) ?? null;
+  }
+
+  function resetEvidenceDialog() {
+    resetEv();
+    setEvType("screenshot");
+    setUploadedImage(null);
+    setUploadedFileName("");
+    setEvidenceTaskId(null);
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadedFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setUploadedImage(ev.target?.result as string);
+    };
+    reader.readAsDataURL(file);
   }
 
   async function onAddTask(data: AddTaskForm) {
@@ -100,17 +120,113 @@ export default function Tasks() {
         type: evType,
         description: data.description,
         link: evType === "link" ? data.link : undefined,
+        uri: (evType === "screenshot" || evType === "image") && uploadedImage ? uploadedImage : undefined,
         status: "pending",
         uploadedAt: new Date().toISOString(),
         userName: currentUser?.name ?? "You",
       });
-      resetEv();
-      setEvType("screenshot");
-      setEvidenceTaskId(null);
+      resetEvidenceDialog();
     } finally {
       setEvLoading(false);
     }
   }
+
+  const EvidenceDialog = ({ task }: { task: Task }) => (
+    <Dialog
+      open={evidenceTaskId === task.id}
+      onOpenChange={(o) => {
+        if (o) setEvidenceTaskId(task.id);
+        else resetEvidenceDialog();
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-shrink-0 text-xs gap-1"
+        >
+          <Upload size={12} />
+          {task.hasEvidence ? "View Proof" : "Add Proof"}
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Submit Proof for "{task.title}"</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={hsEv(onSubmitEvidence)} className="space-y-4 pt-2">
+          <div className="space-y-1.5">
+            <Label>Evidence Type</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {(["screenshot", "link", "image"] as const).map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => { setEvType(t); setUploadedImage(null); setUploadedFileName(""); }}
+                  className={`border rounded-md py-2 text-sm font-semibold transition-colors ${
+                    evType === t ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/50"
+                  }`}
+                >
+                  {t === "screenshot" ? "Screenshot" : t === "link" ? "Link" : "Image"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {evType === "link" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="ev-link">Link URL</Label>
+              <Input id="ev-link" placeholder="https://" {...regEv("link")} />
+            </div>
+          )}
+
+          {(evType === "screenshot" || evType === "image") && (
+            <div className="space-y-1.5">
+              <Label>Upload Image</Label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              {uploadedImage ? (
+                <div className="relative rounded-md overflow-hidden border border-border">
+                  <img src={uploadedImage} alt="Preview" className="w-full max-h-40 object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => { setUploadedImage(null); setUploadedFileName(""); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                    className="absolute top-2 right-2 bg-black/60 rounded-full p-1 hover:bg-black/80"
+                  >
+                    <X size={14} className="text-white" />
+                  </button>
+                  <p className="text-xs text-muted-foreground px-2 py-1 bg-muted/80">{uploadedFileName}</p>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full border-2 border-dashed border-border rounded-md py-6 flex flex-col items-center gap-2 text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
+                >
+                  <ImageIcon size={24} />
+                  <span className="text-sm font-medium">Click to upload image</span>
+                  <span className="text-xs">PNG, JPG, GIF supported</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label htmlFor="ev-desc">Description <span className="text-muted-foreground font-normal">(required)</span></Label>
+            <Input id="ev-desc" placeholder="Describe what you accomplished..." {...regEv("description", { required: true })} />
+          </div>
+
+          <Button type="submit" className="w-full font-bold" disabled={evLoading}>
+            {evLoading ? "Submitting..." : "Submit for Review"}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 
   const TaskCard = ({ task }: { task: Task }) => {
     const linkedGoal = getGoalForTask(task);
@@ -150,6 +266,11 @@ export default function Tasks() {
                   {linkedGoal.title.length > 22 ? linkedGoal.title.slice(0, 22) + "…" : linkedGoal.title}
                 </span>
               )}
+              {task.hasEvidence && (
+                <span className="text-xs bg-green-500/20 text-green-500 px-2 py-0.5 rounded-sm font-medium">
+                  Proof submitted
+                </span>
+              )}
             </div>
 
             <h3 className={`font-bold text-lg mb-1 truncate ${task.status === "completed" ? "line-through text-muted-foreground" : ""}`}>
@@ -172,56 +293,7 @@ export default function Tasks() {
             </div>
           </div>
 
-          {task.status === "completed" && !task.hasEvidence && (
-            <Dialog open={evidenceTaskId === task.id} onOpenChange={(o) => { setEvidenceTaskId(o ? task.id : null); if (!o) resetEv(); }}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="hidden sm:flex flex-shrink-0">Add Proof</Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Submit Evidence for "{task.title}"</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={hsEv(onSubmitEvidence)} className="space-y-4 pt-2">
-                  <div className="space-y-1.5">
-                    <Label>Evidence Type</Label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {(["screenshot", "link", "image"] as const).map(t => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => setEvType(t)}
-                          className={`border rounded-md py-2 text-sm font-semibold transition-colors ${
-                            evType === t ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/50"
-                          }`}
-                        >
-                          {t.charAt(0).toUpperCase() + t.slice(1)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {evType === "link" && (
-                    <div className="space-y-1.5">
-                      <Label htmlFor="ev-link">Link URL</Label>
-                      <Input id="ev-link" placeholder="https://" {...regEv("link")} />
-                    </div>
-                  )}
-                  {(evType === "screenshot" || evType === "image") && (
-                    <div className="space-y-1.5">
-                      <Label htmlFor="ev-url">Image URL (optional)</Label>
-                      <Input id="ev-url" placeholder="https://..." {...regEv("link")} />
-                    </div>
-                  )}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="ev-desc">Description</Label>
-                    <Input id="ev-desc" placeholder="Describe what you accomplished..." {...regEv("description", { required: true })} />
-                  </div>
-                  <Button type="submit" className="w-full font-bold" disabled={evLoading}>
-                    {evLoading ? "Submitting..." : "Submit for Review"}
-                  </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
-          )}
+          <EvidenceDialog task={task} />
         </CardContent>
       </Card>
     );

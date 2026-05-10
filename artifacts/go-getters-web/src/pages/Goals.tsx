@@ -31,6 +31,7 @@ export default function Goals() {
   const { goals, tasks, addGoal, addTask } = useApp();
   const [open, setOpen] = useState(false);
   const [color, setColor] = useState(COLORS[0]);
+  const [goalCategory, setGoalCategory] = useState(CATEGORIES[0]);
   const { register, handleSubmit, reset, formState: { errors } } = useForm<GoalFormValues>();
 
   // Add task to goal state
@@ -44,13 +45,14 @@ export default function Goals() {
     addGoal({
       title: data.title,
       description: data.description,
-      category: data.category,
+      category: goalCategory,
       weekStart: new Date().toISOString().split("T")[0],
       taskIds: [],
       progress: 0,
       color,
     });
     reset();
+    setGoalCategory(CATEGORIES[0]);
     setColor(COLORS[0]);
     setOpen(false);
   };
@@ -123,18 +125,19 @@ export default function Goals() {
                 <Label>Category</Label>
                 <div className="flex flex-wrap gap-2">
                   {CATEGORIES.map((c) => (
-                    <label
+                    <button
                       key={c}
-                      className="cursor-pointer"
+                      type="button"
+                      data-testid={`select-goal-category-${c}`}
+                      onClick={() => setGoalCategory(c)}
+                      className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
+                        goalCategory === c
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground hover:border-primary/50"
+                      }`}
                     >
-                      <input type="radio" value={c} {...register("category", { required: true })} className="sr-only" />
-                      <span
-                        data-testid={`select-goal-category-${c}`}
-                        className="block text-xs px-3 py-1.5 rounded-full border font-medium transition-colors border-border text-muted-foreground hover:border-primary/50 has-[:checked]:border-primary has-[:checked]:bg-primary/10 has-[:checked]:text-primary"
-                      >
-                        {c}
-                      </span>
-                    </label>
+                      {c}
+                    </button>
                   ))}
                 </div>
               </div>

@@ -5,11 +5,21 @@ import { requireAuth, generateId, getAuth } from "../lib/auth";
 
 const router = Router();
 
+function buildGoals(goals: (typeof goalsTable.$inferSelect)[], tasks: (typeof tasksTable.$inferSelect)[]) {
+  return goals.map(g => {
+    const linked = tasks.filter(t => t.goalId === g.id);
+    const progress = linked.length > 0
+      ? Math.round(linked.filter(t => t.status === "completed").length / linked.length * 100)
+      : g.progress;
+    return { ...g, progress, taskIds: linked.map(t => t.id) };
+  });
+}
+
 router.get("/", requireAuth, async (req, res) => {
   const { userId } = getAuth(req);
   const goals = await db.select().from(goalsTable).where(eq(goalsTable.userId, userId));
   const tasks = await db.select().from(tasksTable).where(eq(tasksTable.userId, userId));
-  res.json({ goals: goals.map(g => ({ ...g, taskIds: tasks.filter(t => t.goalId === g.id).map(t => t.id) })) });
+  res.json({ goals: buildGoals(goals, tasks) });
 });
 
 router.get("/user/:userId", requireAuth, async (req, res) => {
@@ -20,7 +30,7 @@ router.get("/user/:userId", requireAuth, async (req, res) => {
   }
   const goals = await db.select().from(goalsTable).where(eq(goalsTable.userId, targetId));
   const tasks = await db.select().from(tasksTable).where(eq(tasksTable.userId, targetId));
-  res.json({ goals: goals.map(g => ({ ...g, taskIds: tasks.filter(t => t.goalId === g.id).map(t => t.id) })) });
+  res.json({ goals: buildGoals(goals, tasks) });
 });
 
 router.post("/", requireAuth, async (req, res) => {

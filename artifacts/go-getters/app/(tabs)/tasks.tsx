@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Platform, KeyboardAvoidingView } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Platform, KeyboardAvoidingView, Image, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import { useColors } from "@/hooks/useColors";
 import { useApp } from "@/context/AppContext";
+import { useAuth } from "@/context/AuthContext";
 import { TaskCard } from "@/components/TaskCard";
 import { Task, TaskPriority } from "@/types";
 
@@ -22,8 +24,11 @@ const CATEGORIES = ["Prospecting", "Follow-Up", "Personal Dev", "Leadership", "C
 export default function TasksScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { tasks, goals, completeTask, addTask } = useApp();
+  const { tasks, goals, completeTask, addTask, addEvidence } = useApp();
+  const { currentUser } = useAuth();
   const [filter, setFilter] = useState<Filter>("Today");
+
+  // New task modal
   const [showModal, setShowModal] = useState(false);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Prospecting");
@@ -31,6 +36,14 @@ export default function TasksScreen() {
   const [dueTime, setDueTime] = useState("");
   const [selectedGoalId, setSelectedGoalId] = useState<string>("");
   const [showGoalPicker, setShowGoalPicker] = useState(false);
+
+  // Proof modal
+  const [proofTask, setProofTask] = useState<Task | null>(null);
+  const [proofDesc, setProofDesc] = useState("");
+  const [proofLink, setProofLink] = useState("");
+  const [proofType, setProofType] = useState<"screenshot" | "image" | "link">("screenshot");
+  const [proofImageUri, setProofImageUri] = useState<string | null>(null);
+  const [proofSubmitting, setProofSubmitting] = useState(false);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const botPad = Platform.OS === "web" ? 34 : insets.bottom;
@@ -66,10 +79,51 @@ export default function TasksScreen() {
       date: today,
       goalId: selectedGoalId || undefined,
     });
-    setTitle("");
-    setDueTime("");
-    setSelectedGoalId("");
-    setShowModal(false);
+    setTitle(""); setDueTime(""); setSelectedGoalId(""); setShowModal(false);
+  }
+
+  async function pickProofImage() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") { Alert.alert("Permission needed", "Please allow access to your photo library."); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.7, base64: true });
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      setProofImageUri(asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri);
+    }
+  }
+
+  async function takeProofPhoto() {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") { Alert.alert("Permission needed", "Please allow camera access."); return; }
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.7, base64: true });
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      setProofImageUri(asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri);
+    }
+  }
+
+  async function handleSubmitProof() {
+    if (!proofDesc.trim() || !proofTask) { Alert.alert("Please add a description"); return; }
+    setProofSubmitting(true);
+    try {
+      await addEvidence({
+        taskId: proofTask.id,
+        taskTitle: proofTask.title,
+        type: proofType,
+        link: proofType === "link" ? proofLink : undefined,
+        uri: proofImageUri ?? undefined,
+        description: proofDesc.trim(),
+        status: "pending",
+        uploadedAt: new Date().toISOString(),
+        userName: currentUser?.name ?? "You",
+      });
+      setProofTask(null); setProofDesc(""); setProofLink(""); setProofImageUri(null); setProofType("screenshot");
+      Alert.alert("Submitted!", "Your proof has been submitted for review.");
+    } catch {
+      Alert.alert("Error", "Could not submit proof. Please try again.");
+    } finally {
+      setProofSubmitting(false);
+    }
   }
 
   function TaskGroup({ title: groupTitle, items, emptyMsg }: { title: string; items: Task[]; emptyMsg?: string }) {
@@ -88,11 +142,20 @@ export default function TasksScreen() {
                 {linkedGoal && (
                   <View style={[styles.goalBadge, { backgroundColor: linkedGoal.color + "22", borderColor: linkedGoal.color + "44" }]}>
                     <Ionicons name="flag" size={10} color={linkedGoal.color} />
-                    <Text style={[styles.goalBadgeText, { color: linkedGoal.color }]} numberOfLines={1}>
-                      {linkedGoal.title}
-                    </Text>
+                    <Text style={[styles.goalBadgeText, { color: linkedGoal.color }]} numberOfLines={1}>{linkedGoal.title}</Text>
                   </View>
                 )}
+                {/* Add Proof button for every task */}
+                <TouchableOpacity
+                  style={[styles.proofBtn, { backgroundColor: t.hasEvidence ? colors.muted : colors.primary + "18", borderColor: t.hasEvidence ? colors.border : colors.primary + "44" }]}
+                  onPress={() => { setProofTask(t); setProofType("screenshot"); setProofDesc(""); setProofImageUri(null); }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name={t.hasEvidence ? "checkmark-circle" : "camera-outline"} size={13} color={t.hasEvidence ? colors.mutedForeground : colors.primary} />
+                  <Text style={[styles.proofBtnText, { color: t.hasEvidence ? colors.mutedForeground : colors.primary }]}>
+                    {t.hasEvidence ? "Proof submitted" : "Add Proof"}
+                  </Text>
+                </TouchableOpacity>
               </View>
             );
           })
@@ -134,6 +197,7 @@ export default function TasksScreen() {
         <Ionicons name="add" size={28} color={colors.primaryForeground} />
       </TouchableOpacity>
 
+      {/* New Task Modal */}
       <Modal visible={showModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowModal(false)}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <View style={[styles.modal, { backgroundColor: colors.background }]}>
@@ -149,12 +213,10 @@ export default function TasksScreen() {
                 <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Task Title</Text>
                 <TextInput style={[styles.input, { color: colors.foreground, backgroundColor: colors.muted, borderColor: colors.border }]} placeholder="What needs to get done?" placeholderTextColor={colors.mutedForeground} value={title} onChangeText={setTitle} autoFocus />
               </View>
-
               <View style={styles.field}>
                 <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Due Time (optional)</Text>
                 <TextInput style={[styles.input, { color: colors.foreground, backgroundColor: colors.muted, borderColor: colors.border }]} placeholder="e.g. 14:00" placeholderTextColor={colors.mutedForeground} value={dueTime} onChangeText={setDueTime} keyboardType="numeric" />
               </View>
-
               <View style={styles.field}>
                 <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Priority</Text>
                 <View style={styles.priorityRow}>
@@ -166,7 +228,6 @@ export default function TasksScreen() {
                   ))}
                 </View>
               </View>
-
               <View style={styles.field}>
                 <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Category</Text>
                 <View style={styles.categoryGrid}>
@@ -177,18 +238,10 @@ export default function TasksScreen() {
                   ))}
                 </View>
               </View>
-
-              {/* Link to Goal */}
               {goals.length > 0 && (
                 <View style={styles.field}>
-                  <Text style={[styles.fieldLabel, { color: colors.foreground }]}>
-                    Link to Goal <Text style={{ color: colors.mutedForeground, fontFamily: "Inter_400Regular" }}>(optional)</Text>
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => setShowGoalPicker(!showGoalPicker)}
-                    style={[styles.goalSelector, { backgroundColor: colors.muted, borderColor: selectedGoal ? selectedGoal.color : colors.border }]}
-                    activeOpacity={0.8}
-                  >
+                  <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Link to Goal <Text style={{ color: colors.mutedForeground, fontFamily: "Inter_400Regular" }}>(optional)</Text></Text>
+                  <TouchableOpacity onPress={() => setShowGoalPicker(!showGoalPicker)} style={[styles.goalSelector, { backgroundColor: colors.muted, borderColor: selectedGoal ? selectedGoal.color : colors.border }]} activeOpacity={0.8}>
                     {selectedGoal ? (
                       <View style={styles.selectedGoal}>
                         <View style={[styles.goalDot, { backgroundColor: selectedGoal.color }]} />
@@ -199,23 +252,13 @@ export default function TasksScreen() {
                     )}
                     <Ionicons name={showGoalPicker ? "chevron-up" : "chevron-down"} size={16} color={colors.mutedForeground} />
                   </TouchableOpacity>
-
                   {showGoalPicker && (
                     <View style={[styles.goalDropdown, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                      <TouchableOpacity
-                        onPress={() => { setSelectedGoalId(""); setShowGoalPicker(false); }}
-                        style={[styles.goalOption, { backgroundColor: !selectedGoalId ? colors.muted : "transparent" }]}
-                        activeOpacity={0.7}
-                      >
+                      <TouchableOpacity onPress={() => { setSelectedGoalId(""); setShowGoalPicker(false); }} style={[styles.goalOption, { backgroundColor: !selectedGoalId ? colors.muted : "transparent" }]} activeOpacity={0.7}>
                         <Text style={[styles.goalOptionText, { color: colors.mutedForeground }]}>None</Text>
                       </TouchableOpacity>
                       {goals.map(g => (
-                        <TouchableOpacity
-                          key={g.id}
-                          onPress={() => { setSelectedGoalId(g.id); setShowGoalPicker(false); }}
-                          style={[styles.goalOption, { backgroundColor: selectedGoalId === g.id ? g.color + "22" : "transparent" }]}
-                          activeOpacity={0.7}
-                        >
+                        <TouchableOpacity key={g.id} onPress={() => { setSelectedGoalId(g.id); setShowGoalPicker(false); }} style={[styles.goalOption, { backgroundColor: selectedGoalId === g.id ? g.color + "22" : "transparent" }]} activeOpacity={0.7}>
                           <View style={[styles.goalDot, { backgroundColor: g.color }]} />
                           <Text style={[styles.goalOptionText, { color: colors.foreground }]} numberOfLines={1}>{g.title}</Text>
                         </TouchableOpacity>
@@ -228,6 +271,82 @@ export default function TasksScreen() {
 
             <TouchableOpacity style={[styles.addBtn, { backgroundColor: colors.primary }]} onPress={handleAdd} activeOpacity={0.85}>
               <Text style={[styles.addText, { color: colors.primaryForeground }]}>Add Task</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Proof Modal */}
+      <Modal visible={!!proofTask} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setProofTask(null)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <View style={[styles.modal, { backgroundColor: colors.background }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.modalTitle, { color: colors.foreground }]}>Add Proof</Text>
+                {proofTask && <Text style={[styles.proofTaskName, { color: colors.mutedForeground }]} numberOfLines={1}>{proofTask.title}</Text>}
+              </View>
+              <TouchableOpacity onPress={() => setProofTask(null)} activeOpacity={0.7}>
+                <Ionicons name="close" size={24} color={colors.foreground} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Evidence Type</Text>
+              <View style={[styles.priorityRow, { marginBottom: 20 }]}>
+                {([
+                  { id: "screenshot" as const, label: "Screenshot", icon: "phone-landscape-outline" },
+                  { id: "image" as const, label: "Photo", icon: "camera-outline" },
+                  { id: "link" as const, label: "Link", icon: "link-outline" },
+                ]).map(t => (
+                  <TouchableOpacity key={t.id} onPress={() => { setProofType(t.id); setProofImageUri(null); }} activeOpacity={0.8}
+                    style={[styles.priorityChip, { flex: 1, backgroundColor: proofType === t.id ? colors.primary + "22" : colors.muted, borderColor: proofType === t.id ? colors.primary : colors.border }]}>
+                    <Ionicons name={t.icon as any} size={14} color={proofType === t.id ? colors.primary : colors.mutedForeground} />
+                    <Text style={[styles.priorityLabel, { color: proofType === t.id ? colors.primary : colors.mutedForeground }]}>{t.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {(proofType === "screenshot" || proofType === "image") && (
+                <View style={{ marginBottom: 20 }}>
+                  <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Upload Image</Text>
+                  {proofImageUri ? (
+                    <View style={styles.imagePreviewWrap}>
+                      <Image source={{ uri: proofImageUri }} style={styles.imagePreview} resizeMode="cover" />
+                      <TouchableOpacity style={styles.removeImage} onPress={() => setProofImageUri(null)} activeOpacity={0.8}>
+                        <Ionicons name="close-circle" size={22} color="#fff" />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={styles.imagePickerRow}>
+                      <TouchableOpacity style={[styles.imagePickerBtn, { backgroundColor: colors.muted, borderColor: colors.border }]} onPress={pickProofImage} activeOpacity={0.8}>
+                        <Ionicons name="images-outline" size={22} color={colors.primary} />
+                        <Text style={[styles.imagePickerText, { color: colors.foreground }]}>Library</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.imagePickerBtn, { backgroundColor: colors.muted, borderColor: colors.border }]} onPress={takeProofPhoto} activeOpacity={0.8}>
+                        <Ionicons name="camera-outline" size={22} color={colors.primary} />
+                        <Text style={[styles.imagePickerText, { color: colors.foreground }]}>Camera</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {proofType === "link" && (
+                <View style={{ marginBottom: 20 }}>
+                  <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Link URL</Text>
+                  <TextInput style={[styles.input, { color: colors.foreground, backgroundColor: colors.muted, borderColor: colors.border }]} placeholder="https://..." placeholderTextColor={colors.mutedForeground} value={proofLink} onChangeText={setProofLink} keyboardType="url" autoCapitalize="none" />
+                </View>
+              )}
+
+              <View style={{ marginBottom: 20 }}>
+                <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Description</Text>
+                <TextInput style={[styles.input, styles.textarea, { color: colors.foreground, backgroundColor: colors.muted, borderColor: colors.border }]} placeholder="Describe what you accomplished..." placeholderTextColor={colors.mutedForeground} value={proofDesc} onChangeText={setProofDesc} multiline numberOfLines={4} textAlignVertical="top" />
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity style={[styles.addBtn, { backgroundColor: colors.primary, opacity: proofSubmitting ? 0.7 : 1 }]} onPress={handleSubmitProof} activeOpacity={0.85} disabled={proofSubmitting}>
+              <Ionicons name="cloud-upload" size={18} color={colors.primaryForeground} />
+              <Text style={[styles.addText, { color: colors.primaryForeground }]}>{proofSubmitting ? "Submitting..." : "Submit Proof"}</Text>
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
@@ -249,15 +368,19 @@ const styles = StyleSheet.create({
   group: { gap: 4, marginBottom: 8 },
   groupTitle: { fontSize: 12, fontFamily: "Inter_700Bold", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 4 },
   emptyMsg: { fontSize: 13, fontFamily: "Inter_400Regular", paddingVertical: 8 },
-  goalBadge: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, alignSelf: "flex-start", marginTop: -4, marginBottom: 6, marginLeft: 4 },
+  goalBadge: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, alignSelf: "flex-start", marginTop: -6, marginBottom: 2, marginLeft: 4 },
   goalBadgeText: { fontSize: 10, fontFamily: "Inter_600SemiBold", maxWidth: 200 },
+  proofBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 8, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 6, alignSelf: "flex-start", marginBottom: 8, marginLeft: 4 },
+  proofBtnText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   fab: { position: "absolute", right: 20, width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8 },
   modal: { flex: 1, padding: 24, gap: 0 },
-  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 24 },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 },
   modalTitle: { fontSize: 20, fontFamily: "Inter_700Bold" },
+  proofTaskName: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
   field: { marginBottom: 20 },
   fieldLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold", marginBottom: 8 },
   input: { borderRadius: 12, borderWidth: 1, padding: 14, fontSize: 15, fontFamily: "Inter_400Regular" },
+  textarea: { minHeight: 100 },
   priorityRow: { flexDirection: "row", gap: 8 },
   priorityChip: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: 10, borderWidth: 1, paddingVertical: 10, gap: 6 },
   priorityDot: { width: 8, height: 8, borderRadius: 4 },
@@ -272,6 +395,12 @@ const styles = StyleSheet.create({
   goalDropdown: { borderRadius: 12, borderWidth: 1, marginTop: 4, overflow: "hidden" },
   goalOption: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 12 },
   goalOptionText: { fontSize: 14, fontFamily: "Inter_400Regular", flex: 1 },
-  addBtn: { borderRadius: 14, paddingVertical: 16, alignItems: "center", marginTop: 8 },
+  imagePickerRow: { flexDirection: "row", gap: 10 },
+  imagePickerBtn: { flex: 1, borderRadius: 12, borderWidth: 1, padding: 14, alignItems: "center", gap: 8 },
+  imagePickerText: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  imagePreviewWrap: { position: "relative", borderRadius: 12, overflow: "hidden", marginBottom: 8 },
+  imagePreview: { width: "100%", height: 180 },
+  removeImage: { position: "absolute", top: 8, right: 8, backgroundColor: "rgba(0,0,0,0.6)", borderRadius: 12 },
+  addBtn: { borderRadius: 14, paddingVertical: 16, alignItems: "center", marginTop: 8, flexDirection: "row", justifyContent: "center", gap: 8 },
   addText: { fontSize: 16, fontFamily: "Inter_700Bold" },
 });

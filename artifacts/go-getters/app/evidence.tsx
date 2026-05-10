@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert, Platform } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert, Platform, Image, KeyboardAvoidingView } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import { useColors } from "@/hooks/useColors";
 import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
@@ -18,16 +19,6 @@ const TYPE_OPTIONS: { id: EvidenceType; label: string; icon: string }[] = [
   { id: "screenshot", label: "Screenshot", icon: "phone-landscape-outline" },
   { id: "image", label: "Photo", icon: "camera-outline" },
   { id: "link", label: "Link", icon: "link-outline" },
-  { id: "voice", label: "Voice Note", icon: "mic-outline" },
-];
-
-const TASK_OPTIONS = [
-  "Morning Prospecting",
-  "Follow up with leads",
-  "Read personal dev book",
-  "Team check-in call",
-  "Post daily win",
-  "Evening review",
 ];
 
 export default function EvidenceScreen() {
@@ -40,24 +31,72 @@ export default function EvidenceScreen() {
   const [link, setLink] = useState("");
   const [evType, setEvType] = useState<EvidenceType>("screenshot");
   const [selectedTask, setSelectedTask] = useState(tasks[0]?.id ?? "");
+  const [pickedImageUri, setPickedImageUri] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const botPad = Platform.OS === "web" ? 34 : insets.bottom;
 
-  function handleSubmit() {
+  async function pickImage() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Please allow access to your photo library to upload images.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7,
+      base64: true,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      const base64Uri = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+      setPickedImageUri(base64Uri);
+    }
+  }
+
+  async function takePhoto() {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Please allow camera access to take photos.");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      quality: 0.7,
+      base64: true,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      const base64Uri = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+      setPickedImageUri(base64Uri);
+    }
+  }
+
+  async function handleSubmit() {
     if (!desc.trim()) { Alert.alert("Please add a description"); return; }
+    if (!selectedTask) { Alert.alert("Please select a task"); return; }
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const task = tasks.find((t) => t.id === selectedTask);
-    addEvidence({
-      taskId: selectedTask,
-      taskTitle: task?.title ?? "Task",
-      type: evType,
-      link: evType === "link" ? link : undefined,
-      description: desc.trim(),
-      status: "pending",
-      uploadedAt: new Date().toISOString(),
-      userName: "You",
-    });
-    setDesc(""); setLink(""); setShowModal(false);
+    setSubmitting(true);
+    try {
+      await addEvidence({
+        taskId: selectedTask,
+        taskTitle: task?.title ?? "Task",
+        type: evType,
+        link: evType === "link" ? link : undefined,
+        uri: pickedImageUri ?? undefined,
+        description: desc.trim(),
+        status: "pending",
+        uploadedAt: new Date().toISOString(),
+        userName: currentUser?.name ?? "You",
+      });
+      setDesc(""); setLink(""); setPickedImageUri(null); setEvType("screenshot");
+      setShowModal(false);
+      Alert.alert("Submitted!", "Your evidence has been submitted for review.");
+    } catch {
+      Alert.alert("Error", "Could not submit evidence. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function timeAgo(iso: string) {
@@ -109,7 +148,7 @@ export default function EvidenceScreen() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.evTask, { color: colors.foreground }]} numberOfLines={1}>{ev.taskTitle}</Text>
-                    <Text style={[styles.evTime, { color: colors.mutedForeground }]}>{timeAgo(ev.uploadedAt)}</Text>
+                    <Text style={[styles.evTime, { color: colors.mutedForeground }]}>{timeAgo(ev.uploadedAt)} · {ev.userName}</Text>
                   </View>
                   <View style={[styles.statusChip, { backgroundColor: conf.color + "22" }]}>
                     <Ionicons name={conf.icon as any} size={12} color={conf.color} />
@@ -117,6 +156,10 @@ export default function EvidenceScreen() {
                   </View>
                 </View>
                 <Text style={[styles.evDesc, { color: colors.mutedForeground }]}>{ev.description}</Text>
+                {/* Show uploaded image if available */}
+                {ev.uri && ev.uri.startsWith("data:image") && (
+                  <Image source={{ uri: ev.uri }} style={styles.evImage} resizeMode="cover" />
+                )}
                 {ev.feedback && ev.status === "rejected" && (
                   <View style={[styles.feedbackBox, { backgroundColor: colors.error + "12", borderColor: colors.error + "33" }]}>
                     <Ionicons name="information-circle-outline" size={13} color={colors.error} />
@@ -130,50 +173,88 @@ export default function EvidenceScreen() {
       </ScrollView>
 
       <Modal visible={showModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowModal(false)}>
-        <View style={[styles.modal, { backgroundColor: colors.background }]}>
-          <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Submit Evidence</Text>
-            <TouchableOpacity onPress={() => setShowModal(false)} activeOpacity={0.7}>
-              <Ionicons name="close" size={24} color={colors.foreground} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Evidence Type</Text>
-            <View style={styles.typeRow}>
-              {TYPE_OPTIONS.map((t) => (
-                <TouchableOpacity key={t.id} onPress={() => setEvType(t.id)} activeOpacity={0.8} style={[styles.typeChip, { backgroundColor: evType === t.id ? colors.primary + "22" : colors.muted, borderColor: evType === t.id ? colors.primary : colors.border }]}>
-                  <Ionicons name={t.icon as any} size={16} color={evType === t.id ? colors.primary : colors.mutedForeground} />
-                  <Text style={[styles.typeText, { color: evType === t.id ? colors.primary : colors.mutedForeground }]}>{t.label}</Text>
-                </TouchableOpacity>
-              ))}
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <View style={[styles.modal, { backgroundColor: colors.background }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Submit Evidence</Text>
+              <TouchableOpacity onPress={() => setShowModal(false)} activeOpacity={0.7}>
+                <Ionicons name="close" size={24} color={colors.foreground} />
+              </TouchableOpacity>
             </View>
 
-            <Text style={[styles.fieldLabel, { color: colors.foreground, marginTop: 16 }]}>Related Task</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.taskScroll}>
-              {tasks.map((t) => (
-                <TouchableOpacity key={t.id} onPress={() => setSelectedTask(t.id)} activeOpacity={0.8} style={[styles.taskChip, { backgroundColor: selectedTask === t.id ? colors.primary + "22" : colors.muted, borderColor: selectedTask === t.id ? colors.primary : colors.border }]}>
-                  <Text style={[styles.taskText, { color: selectedTask === t.id ? colors.primary : colors.mutedForeground }]} numberOfLines={1}>{t.title}</Text>
-                </TouchableOpacity>
-              ))}
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Evidence Type</Text>
+              <View style={styles.typeRow}>
+                {TYPE_OPTIONS.map((t) => (
+                  <TouchableOpacity key={t.id} onPress={() => { setEvType(t.id); setPickedImageUri(null); }} activeOpacity={0.8}
+                    style={[styles.typeChip, { backgroundColor: evType === t.id ? colors.primary + "22" : colors.muted, borderColor: evType === t.id ? colors.primary : colors.border }]}>
+                    <Ionicons name={t.icon as any} size={16} color={evType === t.id ? colors.primary : colors.mutedForeground} />
+                    <Text style={[styles.typeText, { color: evType === t.id ? colors.primary : colors.mutedForeground }]}>{t.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={[styles.fieldLabel, { color: colors.foreground, marginTop: 16 }]}>Related Task</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.taskScroll}>
+                {tasks.map((t) => (
+                  <TouchableOpacity key={t.id} onPress={() => setSelectedTask(t.id)} activeOpacity={0.8}
+                    style={[styles.taskChip, { backgroundColor: selectedTask === t.id ? colors.primary + "22" : colors.muted, borderColor: selectedTask === t.id ? colors.primary : colors.border }]}>
+                    <Text style={[styles.taskText, { color: selectedTask === t.id ? colors.primary : colors.mutedForeground }]} numberOfLines={1}>{t.title}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              {/* Image upload section */}
+              {(evType === "screenshot" || evType === "image") && (
+                <View style={{ marginTop: 16 }}>
+                  <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Upload Image</Text>
+                  {pickedImageUri ? (
+                    <View style={styles.imagePreviewWrap}>
+                      <Image source={{ uri: pickedImageUri }} style={styles.imagePreview} resizeMode="cover" />
+                      <TouchableOpacity style={styles.removeImage} onPress={() => setPickedImageUri(null)} activeOpacity={0.8}>
+                        <Ionicons name="close-circle" size={22} color="#fff" />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={styles.imagePickerRow}>
+                      <TouchableOpacity
+                        style={[styles.imagePickerBtn, { backgroundColor: colors.muted, borderColor: colors.border }]}
+                        onPress={pickImage}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="images-outline" size={22} color={colors.primary} />
+                        <Text style={[styles.imagePickerText, { color: colors.foreground }]}>Photo Library</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.imagePickerBtn, { backgroundColor: colors.muted, borderColor: colors.border }]}
+                        onPress={takePhoto}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="camera-outline" size={22} color={colors.primary} />
+                        <Text style={[styles.imagePickerText, { color: colors.foreground }]}>Camera</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {evType === "link" && (
+                <>
+                  <Text style={[styles.fieldLabel, { color: colors.foreground, marginTop: 16 }]}>Link URL</Text>
+                  <TextInput style={[styles.input, { color: colors.foreground, backgroundColor: colors.muted, borderColor: colors.border }]} placeholder="https://..." placeholderTextColor={colors.mutedForeground} value={link} onChangeText={setLink} keyboardType="url" autoCapitalize="none" />
+                </>
+              )}
+
+              <Text style={[styles.fieldLabel, { color: colors.foreground, marginTop: 16 }]}>Description</Text>
+              <TextInput style={[styles.input, styles.textarea, { color: colors.foreground, backgroundColor: colors.muted, borderColor: colors.border }]} placeholder="Describe what you accomplished..." placeholderTextColor={colors.mutedForeground} value={desc} onChangeText={setDesc} multiline numberOfLines={4} textAlignVertical="top" />
             </ScrollView>
 
-            {evType === "link" && (
-              <>
-                <Text style={[styles.fieldLabel, { color: colors.foreground, marginTop: 16 }]}>Link URL</Text>
-                <TextInput style={[styles.input, { color: colors.foreground, backgroundColor: colors.muted, borderColor: colors.border }]} placeholder="https://..." placeholderTextColor={colors.mutedForeground} value={link} onChangeText={setLink} keyboardType="url" autoCapitalize="none" />
-              </>
-            )}
-
-            <Text style={[styles.fieldLabel, { color: colors.foreground, marginTop: 16 }]}>Description</Text>
-            <TextInput style={[styles.input, styles.textarea, { color: colors.foreground, backgroundColor: colors.muted, borderColor: colors.border }]} placeholder="Describe what you accomplished and the evidence you're submitting..." placeholderTextColor={colors.mutedForeground} value={desc} onChangeText={setDesc} multiline numberOfLines={4} textAlignVertical="top" />
-          </ScrollView>
-
-          <TouchableOpacity style={[styles.submitBtn, { backgroundColor: colors.primary }]} onPress={handleSubmit} activeOpacity={0.85}>
-            <Ionicons name="cloud-upload" size={18} color={colors.primaryForeground} />
-            <Text style={[styles.submitText, { color: colors.primaryForeground }]}>Submit for Review</Text>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity style={[styles.submitBtn, { backgroundColor: colors.primary, opacity: submitting ? 0.7 : 1 }]} onPress={handleSubmit} activeOpacity={0.85} disabled={submitting}>
+              <Ionicons name="cloud-upload" size={18} color={colors.primaryForeground} />
+              <Text style={[styles.submitText, { color: colors.primaryForeground }]}>{submitting ? "Submitting..." : "Submit for Review"}</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -197,6 +278,7 @@ const styles = StyleSheet.create({
   statusChip: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   statusText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
   evDesc: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 18 },
+  evImage: { width: "100%", height: 160, borderRadius: 10, marginTop: 4 },
   feedbackBox: { flexDirection: "row", alignItems: "flex-start", gap: 6, borderRadius: 8, padding: 10, borderWidth: 1 },
   feedbackText: { fontSize: 11, fontFamily: "Inter_400Regular", flex: 1 },
   modal: { flex: 1, padding: 24 },
@@ -209,6 +291,12 @@ const styles = StyleSheet.create({
   taskScroll: { marginBottom: 4 },
   taskChip: { borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, marginRight: 8, maxWidth: 180 },
   taskText: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  imagePickerRow: { flexDirection: "row", gap: 10 },
+  imagePickerBtn: { flex: 1, borderRadius: 12, borderWidth: 1, padding: 14, alignItems: "center", gap: 8 },
+  imagePickerText: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  imagePreviewWrap: { position: "relative", borderRadius: 12, overflow: "hidden" },
+  imagePreview: { width: "100%", height: 180 },
+  removeImage: { position: "absolute", top: 8, right: 8, backgroundColor: "rgba(0,0,0,0.6)", borderRadius: 12 },
   input: { borderRadius: 12, borderWidth: 1, padding: 14, fontSize: 15, fontFamily: "Inter_400Regular" },
   textarea: { minHeight: 100, marginBottom: 16 },
   submitBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: 14, paddingVertical: 16, gap: 8, marginTop: 8 },

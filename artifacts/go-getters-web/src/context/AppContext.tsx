@@ -90,8 +90,13 @@ export function AppProvider({ children, userId }: { children: ReactNode; userId?
 
   const completeTask = useCallback(async (id: string) => {
     const completedAt = new Date().toISOString();
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'completed', completedAt } : t));
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'completed' as const, completedAt } : t));
     await api.patch(`/tasks/${id}`, { status: 'completed', completedAt });
+    // Refresh goals so progress percentages update
+    try {
+      const { goals: updatedGoals } = await api.get<{ goals: Goal[] }>('/goals');
+      setGoals(updatedGoals);
+    } catch {}
   }, []);
 
   const addTask = useCallback(async (task: Omit<Task, 'id'>) => {
