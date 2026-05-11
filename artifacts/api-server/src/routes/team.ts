@@ -3,6 +3,7 @@ import { db, usersTable, tasksTable, goalsTable, evidenceTable, teamMessagesTabl
 import { eq } from "drizzle-orm";
 import { requireAuth, generateId, getAuth } from "../lib/auth";
 import { createNotification } from "../lib/notify";
+import { email } from "../lib/email";
 
 const router = Router();
 
@@ -69,15 +70,21 @@ router.post("/:id/messages", requireAuth, async (req, res) => {
   };
   await db.insert(teamMessagesTable).values(msg);
 
-  // Notify the member they received a message
+  // Look up the member to get their email
+  const memberRows = await db.select().from(usersTable).where(eq(usersTable.id, memberId)).limit(1);
+  const member = memberRows[0];
   const isNote = type === "note";
-  await createNotification({
-    userId: memberId,
-    type: isNote ? "announcement" : "reminder",
-    title: isNote ? `📝 Note from ${user.name}` : `💬 Message from ${user.name}`,
-    body: content.length > 120 ? content.slice(0, 117) + "…" : content,
-    level: 1,
-  });
+
+  await Promise.all([
+    createNotification({
+      userId: memberId,
+      type: isNote ? "announcement" : "reminder",
+      title: isNote ? `📝 Note from ${user.name}` : `💬 Message from ${user.name}`,
+      body: content.length > 120 ? content.slice(0, 117) + "…" : content,
+      level: 1,
+    }),
+    member ? email.teamMessage(member.email, member.name, user.name, content, isNote) : Promise.resolve(),
+  ]);
 
   res.status(201).json({ message: msg });
 });

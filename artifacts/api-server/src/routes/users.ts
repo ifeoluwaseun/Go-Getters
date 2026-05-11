@@ -3,6 +3,7 @@ import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth, getAuth } from "../lib/auth";
 import { createNotification } from "../lib/notify";
+import { email } from "../lib/email";
 
 const router = Router();
 
@@ -47,14 +48,16 @@ router.post("/:id/approve", requireAuth, async (req, res) => {
   const updated = await db.update(usersTable).set({ status: "approved" }).where(eq(usersTable.id, id)).returning();
   const user = updated[0];
   if (user) {
-    // Welcome notification for newly approved member
-    await createNotification({
-      userId: id,
-      type: "announcement",
-      title: "🎉 Welcome to Go-Getters!",
-      body: `Your application has been approved, ${user.name}! Start by setting your goals and completing your first task today.`,
-      level: 1,
-    });
+    await Promise.all([
+      createNotification({
+        userId: id,
+        type: "announcement",
+        title: "🎉 Welcome to Go-Getters!",
+        body: `Your application has been approved, ${user.name}! Start by setting your goals and completing your first task today.`,
+        level: 1,
+      }),
+      email.welcomeApproved(user.email, user.name),
+    ]);
   }
   res.json({ user: safeUser(user) });
 });
