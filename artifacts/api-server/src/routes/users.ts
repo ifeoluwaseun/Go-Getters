@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth, getAuth } from "../lib/auth";
+import { createNotification } from "../lib/notify";
 
 const router = Router();
 
@@ -44,7 +45,18 @@ router.post("/:id/approve", requireAuth, async (req, res) => {
   const id = String(req.params.id);
   if (userRole !== "admin") { res.status(403).json({ error: "Forbidden" }); return; }
   const updated = await db.update(usersTable).set({ status: "approved" }).where(eq(usersTable.id, id)).returning();
-  res.json({ user: safeUser(updated[0]) });
+  const user = updated[0];
+  if (user) {
+    // Welcome notification for newly approved member
+    await createNotification({
+      userId: id,
+      type: "announcement",
+      title: "🎉 Welcome to Go-Getters!",
+      body: `Your application has been approved, ${user.name}! Start by setting your goals and completing your first task today.`,
+      level: 1,
+    });
+  }
+  res.json({ user: safeUser(user) });
 });
 
 router.post("/:id/reject", requireAuth, async (req, res) => {

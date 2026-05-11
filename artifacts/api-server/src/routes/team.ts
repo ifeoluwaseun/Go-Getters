@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, usersTable, tasksTable, goalsTable, evidenceTable, teamMessagesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth, generateId, getAuth } from "../lib/auth";
+import { createNotification } from "../lib/notify";
 
 const router = Router();
 
@@ -58,15 +59,26 @@ router.get("/:id/messages", requireAuth, async (req, res) => {
 router.post("/:id/messages", requireAuth, async (req, res) => {
   const { userId, userRole, user } = getAuth(req);
   if (userRole !== "admin" && userRole !== "leader") { res.status(403).json({ error: "Forbidden" }); return; }
-  const id = String(req.params.id);
+  const memberId = String(req.params.id);
   const { content, type } = req.body as { content: string; type?: string };
   const msg = {
-    id: generateId(), memberId: id,
+    id: generateId(), memberId,
     senderId: userId, senderName: user.name,
     content, type: type || "message",
     sentAt: new Date().toISOString(),
   };
   await db.insert(teamMessagesTable).values(msg);
+
+  // Notify the member they received a message
+  const isNote = type === "note";
+  await createNotification({
+    userId: memberId,
+    type: isNote ? "announcement" : "reminder",
+    title: isNote ? `📝 Note from ${user.name}` : `💬 Message from ${user.name}`,
+    body: content.length > 120 ? content.slice(0, 117) + "…" : content,
+    level: 1,
+  });
+
   res.status(201).json({ message: msg });
 });
 

@@ -1,7 +1,8 @@
 import { Router } from "express";
-import { db, tasksTable } from "@workspace/db";
+import { db, tasksTable, usersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth, generateId, getAuth } from "../lib/auth";
+import { createNotification } from "../lib/notify";
 
 const router = Router();
 
@@ -61,6 +62,61 @@ router.patch("/:id", requireAuth, async (req, res) => {
   if (b.dueTime !== undefined) updates.dueTime = b.dueTime as string;
   if (b.notes !== undefined) updates.notes = b.notes as string;
   const updated = await db.update(tasksTable).set(updates).where(eq(tasksTable.id, id)).returning();
+
+  // Fire notifications when a task is marked completed
+  if (b.status === "completed" && rows[0].status !== "completed") {
+    const task = rows[0];
+    // Count how many tasks completed today
+    const today = new Date().toISOString().split("T")[0];
+    const todayTasks = await db.select().from(tasksTable).where(eq(tasksTable.userId, userId));
+    const completedToday = todayTasks.filter(t => t.date === today && (t.id === id || t.status === "completed")).length;
+
+    // Streak milestone notifications
+    const userRows = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    const user = userRows[0];
+    if (user) {
+      const newStreak = user.streak + 1;
+      await db.update(usersTable).set({ streak: newStreak, points: user.points + 10 }).where(eq(usersTable.id, userId));
+
+      if (newStreak > 0 && newStreak % 7 === 0) {
+        await createNotification({
+          userId,
+          type: "streak",
+          title: `🔥 ${newStreak}-Day Streak!`,
+          body: `Incredible consistency! You've been showing up for ${newStreak} days straight. Keep it going!`,
+          level: 1,
+        });
+      } else if (newStreak === 3) {
+        await createNotification({
+          userId,
+          type: "streak",
+          title: "🔥 3-Day Streak Started!",
+          body: "You're on a roll! Three days of consistent action. Don't stop now.",
+          level: 1,
+        });
+      }
+    }
+
+    // Task completion milestone notifications
+    if (completedToday === 5) {
+      await createNotification({
+        userId,
+        type: "achievement",
+        title: "⚡ 5 Tasks Crushed Today!",
+        body: `You just completed "${task.title}" and hit 5 tasks for the day. You're unstoppable!`,
+        level: 1,
+      });
+    } else if (completedToday === 1) {
+      await createNotification({
+        userId,
+        type: "reminder",
+        title: "✅ First Task Done!",
+        body: `"${task.title}" is complete. Momentum is everything — keep going!`,
+        level: 1,
+      });
+    }
+  }
+
   res.json({ task: updated[0] });
 });
 
