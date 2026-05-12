@@ -6,6 +6,17 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = "Go-Getters <onboarding@resend.dev>";
 const APP_NAME = "Go-Getters";
 
+function getAppUrl(): string {
+  const domains = process.env.REPLIT_DOMAINS;
+  if (domains) {
+    const first = domains.split(",")[0].trim();
+    return `https://${first}/web`;
+  }
+  const devDomain = process.env.REPLIT_DEV_DOMAIN;
+  if (devDomain) return `https://${devDomain}/web`;
+  return "https://go-getters.replit.app/web";
+}
+
 interface EmailPayload {
   to: string;
   subject: string;
@@ -60,6 +71,7 @@ export const email = {
         `Nice work, ${name.split(" ")[0]}! ✅`,
         `You just completed <strong style="color:#f4f4f5;">"${taskTitle}"</strong>.<br><br>
         ${streak > 1 ? `You're on a <strong style="color:#00d8fe;">${streak}-day streak</strong>. Consistency is your superpower — don't break the chain!` : "Every task completed is a step closer to your goals. Keep going!"}`,
+        { text: "View My Tasks", url: `${getAppUrl()}/tasks` },
       ),
     });
   },
@@ -72,6 +84,7 @@ export const email = {
         `${streak}-Day Streak! 🔥`,
         `<strong style="color:#f4f4f5;">${name.split(" ")[0]}</strong>, you've shown up for <strong style="color:#00d8fe;">${streak} days straight</strong>.<br><br>
         That level of consistency separates the top performers from everyone else. You're building something real. Keep showing up!`,
+        { text: "View Leaderboard", url: `${getAppUrl()}/leaderboard` },
       ),
     });
   },
@@ -85,6 +98,7 @@ export const email = {
         `Hi <strong style="color:#f4f4f5;">${name.split(" ")[0]}</strong>,<br><br>
         Your evidence for <strong style="color:#f4f4f5;">"${taskTitle}"</strong> has been submitted successfully and is now awaiting review from your leader.<br><br>
         You'll receive another notification once it's been reviewed.`,
+        { text: "View My Evidence", url: `${getAppUrl()}/evidence` },
       ),
     });
   },
@@ -98,6 +112,7 @@ export const email = {
         `Fantastic work, <strong style="color:#f4f4f5;">${name.split(" ")[0]}</strong>!<br><br>
         Your proof for <strong style="color:#f4f4f5;">"${taskTitle}"</strong> has been reviewed and <strong style="color:#00e57d;">approved</strong> by your leader.<br><br>
         This is what accountability looks like. You're setting the standard for the team!`,
+        { text: "Open Go-Getters", url: getAppUrl() },
       ),
     });
   },
@@ -112,6 +127,7 @@ export const email = {
         Your proof for <strong style="color:#f4f4f5;">"${taskTitle}"</strong> was returned by your leader with the following feedback:<br><br>
         <div style="background:#1f1f23;border-left:3px solid #fbbf24;border-radius:4px;padding:12px 16px;margin:12px 0;color:#f4f4f5;font-style:italic;">"${feedback}"</div>
         Please resubmit with the requested changes. You've got this!`,
+        { text: "Resubmit Evidence", url: `${getAppUrl()}/evidence` },
       ),
     });
   },
@@ -125,6 +141,7 @@ export const email = {
         `Hi <strong style="color:#f4f4f5;">${memberName.split(" ")[0]}</strong>,<br><br>
         Your ${isNote ? "leader left you a note" : "leader sent you a message"}:<br><br>
         <div style="background:#1f1f23;border-left:3px solid #00d8fe;border-radius:4px;padding:12px 16px;margin:12px 0;color:#f4f4f5;">${content}</div>`,
+        { text: "Open Go-Getters", url: getAppUrl() },
       ),
     });
   },
@@ -144,7 +161,7 @@ export const email = {
           <li>Check the <strong style="color:#f4f4f5;">leaderboard</strong> and climb the ranks</li>
         </ul>
         Welcome to the team — let's build something great together!`,
-        { text: "Open Go-Getters" },
+        { text: "Open Go-Getters", url: getAppUrl() },
       ),
     });
   },
