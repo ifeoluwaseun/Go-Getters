@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 import { logger } from "./logger";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 const FROM = "Go-Getters <onboarding@resend.dev>";
 const APP_NAME = "Go-Getters";
@@ -24,7 +24,7 @@ interface EmailPayload {
 }
 
 async function send(payload: EmailPayload) {
-  if (!process.env.RESEND_API_KEY) return;
+  if (!resend) return;
   try {
     await resend.emails.send({ from: FROM, ...payload });
   } catch (err) {
