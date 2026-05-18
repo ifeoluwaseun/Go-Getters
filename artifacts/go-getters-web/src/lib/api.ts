@@ -28,8 +28,9 @@ export async function apiFetch<T = unknown>(
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(body.error || `HTTP ${res.status}`);
+    const body = await res.json().catch(() => ({ error: res.statusText, details: undefined }));
+    const errMsg = body.details ? `${body.error}: ${body.details}` : (body.error || `HTTP ${res.status}`);
+    throw new Error(errMsg);
   }
   return res.json() as Promise<T>;
 }
