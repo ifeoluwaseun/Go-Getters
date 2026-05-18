@@ -12,6 +12,14 @@ if (!connectionString) {
   );
 }
 
+try {
+  const urlParts = connectionString.split("@")[1] || connectionString;
+  const hostAndDb = urlParts.split("?")[0];
+  console.log(`[DB INIT] Connecting to database at: ${hostAndDb}`);
+} catch (e) {
+  console.log("[DB INIT] Connecting to database...");
+}
+
 export const pool = new Pool({
   connectionString,
   ssl: connectionString.includes("supabase.co") ? { rejectUnauthorized: false } : undefined,
