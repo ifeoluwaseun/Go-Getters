@@ -34,34 +34,39 @@ router.post("/login", async (req, res) => {
 });
 
 router.post("/register", async (req, res) => {
-  const { name, email, password, role, leaderId, leaderName, sponsorId, sponsorName, adminCode } = req.body as Record<string, string>;
-  if (!name || !email || !password) { res.status(400).json({ error: "Name, email and password required" }); return; }
+  try {
+    const { name, email, password, role, leaderId, leaderName, sponsorId, sponsorName, adminCode } = req.body as Record<string, string>;
+    if (!name || !email || !password) { res.status(400).json({ error: "Name, email and password required" }); return; }
 
-  const existing = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase().trim())).limit(1);
-  if (existing[0]) { res.status(409).json({ error: "Email already registered" }); return; }
+    const existing = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase().trim())).limit(1);
+    if (existing[0]) { res.status(409).json({ error: "Email already registered" }); return; }
 
-  const isAdmin = adminCode?.trim() === ADMIN_CODE;
-  const finalRole = isAdmin ? "admin" : (role || "member");
-  const userId = generateId();
-  const user = {
-    id: userId,
-    name: name.trim(),
-    email: email.toLowerCase().trim(),
-    passwordHash: hashPassword(password),
-    role: finalRole,
-    status: isAdmin ? "approved" : "pending",
-    streak: 0, points: 0, completionRate: 0, consistency: 0,
-    joinedAt: new Date().toISOString(),
-    title: finalRole === "admin" ? "Organization Owner" : finalRole === "leader" ? "Team Leader" : "Go-Getter",
-    leaderId: leaderId || null, leaderName: leaderName || null,
-    sponsorId: sponsorId || null, sponsorName: sponsorName || null,
-    rejectionReason: null,
-  };
+    const isAdmin = adminCode?.trim() === ADMIN_CODE;
+    const finalRole = isAdmin ? "admin" : (role || "member");
+    const userId = generateId();
+    const user = {
+      id: userId,
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
+      passwordHash: hashPassword(password),
+      role: finalRole,
+      status: isAdmin ? "approved" : "pending",
+      streak: 0, points: 0, completionRate: 0, consistency: 0,
+      joinedAt: new Date().toISOString(),
+      title: finalRole === "admin" ? "Organization Owner" : finalRole === "leader" ? "Team Leader" : "Go-Getter",
+      leaderId: leaderId || null, leaderName: leaderName || null,
+      sponsorId: sponsorId || null, sponsorName: sponsorName || null,
+      rejectionReason: null,
+    };
 
-  await db.insert(usersTable).values(user);
-  const token = generateToken();
-  await db.insert(sessionsTable).values({ id: generateId(), userId, token, expiresAt: sessionExpiry() });
-  res.status(201).json({ token, user: safeUser(user as typeof usersTable.$inferSelect) });
+    await db.insert(usersTable).values(user);
+    const token = generateToken();
+    await db.insert(sessionsTable).values({ id: generateId(), userId, token, expiresAt: sessionExpiry() });
+    res.status(201).json({ token, user: safeUser(user as typeof usersTable.$inferSelect) });
+  } catch (err: any) {
+    req.log.error({ err }, "Registration error occurred");
+    res.status(500).json({ error: "Internal server error", details: err.message || err });
+  }
 });
 
 router.post("/logout", requireAuth, async (req, res) => {
