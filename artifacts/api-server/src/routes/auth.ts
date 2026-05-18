@@ -65,7 +65,8 @@ router.post("/register", async (req, res) => {
     res.status(201).json({ token, user: safeUser(user as typeof usersTable.$inferSelect) });
   } catch (err: any) {
     req.log.error({ err }, "Registration error occurred");
-    res.status(500).json({ error: "Internal server error", details: err.message || err });
+    const causeMsg = err.cause?.message || err.originalError?.message || err.message || String(err);
+    res.status(500).json({ error: "Internal server error", details: `QUERY: ${err.message} -- CAUSE: ${causeMsg}` });
   }
 });
 
