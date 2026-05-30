@@ -47,3 +47,14 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Next.js / Vercel build folders
+.next/
+.vercel/
+
+# Sensitive Environment Configurations
+.env
+.env.local
+.env.*.local
+*.local
+

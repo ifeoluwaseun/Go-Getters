@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Dark grey gradient for the 'G' -->
+    <linearGradient id="g-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4E545C" />
+      <stop offset="100%" stop-color="#1A1C1E" />
+    </linearGradient>
+    <!-- Cyan gradient for the vibrant swoosh and arrow -->
+    <linearGradient id="cyan-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00E5FF" />
+      <stop offset="100%" stop-color="#00A8FF" />
+    </linearGradient>
+  </defs>
+
+  <!-- Main Group for centering and styling -->
+  <g transform="translate(10, 10) scale(0.96)">
+    <!-- Stylized Bold Capital 'G' -->
+    <path d="M 240,40 
+             C 120,40 40,130 40,250 
+             C 40,370 120,460 240,460 
+             C 330,460 400,410 430,340 
+             L 360,305 
+             C 340,340 300,370 240,370 
+             C 170,370 130,320 130,250 
+             C 130,180 170,130 240,130 
+             C 300,130 340,165 360,210 
+             L 430,175 
+             C 400,100 330,40 240,40 Z" 
+          fill="url(#g-grad)" />
+
+    <!-- The inner horizontal bar of the 'G' -->
+    <path d="M 240,220 H 350 V 280 H 240 Z" fill="url(#g-grad)" />
+
+    <!-- Stylized Cyan Swoosh & Arrow -->
+    <!-- The swoosh starts from the bottom-left curve (wrapping around the outer boundary),
+         sweeps under, and cuts UP through the bottom-right as a sharp ascending arrow -->
+    <path d="M 30,250
+             C 30,360 110,430 220,430
+             C 290,430 350,390 380,330
+             L 320,300
+             C 300,340 260,370 220,370
+             C 150,370 95,310 95,240
+             C 95,210 105,180 120,160
+             C 105,185 80,210 50,220
+             C 38,230 30,240 30,250 Z" 
+          fill="url(#cyan-grad)" />
+
+    <!-- The arrow cutting through the inner space of the 'G' pointing up-right -->
+    <path d="M 180,340 
+             C 210,310 260,260 290,200 
+             L 240,180 
+             L 380,140 
+             L 340,280 
+             L 300,230 
+             C 270,280 220,320 180,340 Z" 
+          fill="url(#cyan-grad)" />
+  </g>
+</svg>
