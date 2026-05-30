@@ -521,7 +521,7 @@ export function AppProvider({ children, userId }: { children: ReactNode; userId?
       link: ev.link || null,
       description: ev.description,
       status: 'pending',
-      uploaded_at: new Date().toLocaleDateString(),
+      uploaded_at: new Date().toISOString(),
     };
 
     const { error } = await supabase.from('evidence').insert(evData);
@@ -601,7 +601,7 @@ export function AppProvider({ children, userId }: { children: ReactNode; userId?
       sender_name: senderName,
       content,
       type,
-      sent_at: new Date().toLocaleTimeString(),
+      sent_at: new Date().toISOString(),
     };
 
     const { error } = await supabase.from('team_messages').insert(msgData);

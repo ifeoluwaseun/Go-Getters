@@ -1,7 +1,6 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { User, UserRole, LeaderOption } from '@/types';
-import { api, setToken, clearToken } from '@/lib/api';
+import { User, UserRole, LeaderOption, UserStatus } from '@/types';
+import { supabase } from '@/lib/supabase';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -25,6 +24,7 @@ interface AuthContextType {
   updateUser: (updates: Partial<User>) => Promise<void>;
   approveUser: (id: string) => Promise<void>;
   rejectUser: (id: string, reason: string) => Promise<void>;
+  refreshUsers: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -39,86 +39,297 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshLeaders = useCallback(async () => {
     try {
-      const { leaders: l } = await api.get<{ leaders: LeaderOption[] }>('/users/leaders');
-      setLeaders(l);
-    } catch {}
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, name')
+        .or('role.eq.leader,role.eq.admin');
+      if (error) throw error;
+      setLeaders(data || []);
+    } catch (err) {
+      console.error("Error refreshing leaders on mobile:", err);
+    }
   }, []);
 
   const refreshUsers = useCallback(async () => {
     try {
-      const { users } = await api.get<{ users: User[] }>('/users');
-      setAllUsers(users);
-    } catch {}
+      const { data, error } = await supabase
+        .from('users')
+        .select('*');
+      if (error) throw error;
+
+      const mapped = (data || []).map((u) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role as UserRole,
+        status: u.status as UserStatus,
+        streak: u.streak,
+        points: u.points,
+        completionRate: u.completion_rate,
+        consistency: u.consistency,
+        joinedAt: u.joined_at,
+        title: u.title,
+        leaderId: u.leader_id,
+        leaderName: u.leader_name,
+        sponsorId: u.sponsor_id,
+        sponsorName: u.sponsor_name,
+        rejectionReason: u.rejection_reason,
+      }));
+      setAllUsers(mapped);
+    } catch (err) {
+      console.error("Error refreshing users on mobile:", err);
+    }
   }, []);
 
   useEffect(() => {
-    AsyncStorage.getItem('gg_token').then(async (token) => {
-      if (!token) { setIsLoading(false); return; }
+    const fetchUser = async (userId: string) => {
       try {
-        const { user } = await api.get<{ user: User }>('/auth/me');
-        setCurrentUser(user);
-        await refreshLeaders();
-        if (user.role === 'admin') await refreshUsers();
-      } catch {
-        await clearToken();
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', userId)
+          .single();
+        if (error) throw error;
+
+        if (data) {
+          const userObj: User = {
+            id: data.id,
+            name: data.name,
+            email: data.email,
+            role: data.role as UserRole,
+            status: data.status as UserStatus,
+            streak: data.streak,
+            points: data.points,
+            completionRate: data.completion_rate,
+            consistency: data.consistency,
+            joinedAt: data.joined_at,
+            title: data.title,
+            leaderId: data.leader_id || undefined,
+            leaderName: data.leader_name || undefined,
+            sponsorId: data.sponsor_id || undefined,
+            sponsorName: data.sponsor_name || undefined,
+            rejectionReason: data.rejection_reason || undefined,
+          };
+          setCurrentUser(userObj);
+          if (userObj.role === 'admin') await refreshUsers();
+        }
+      } catch (err) {
+        console.error("Error loading user profile on mobile:", err);
       } finally {
         setIsLoading(false);
       }
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        fetchUser(session.user.id);
+      } else {
+        setIsLoading(false);
+      }
     });
-  }, []);
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        await fetchUser(session.user.id);
+      } else {
+        setCurrentUser(null);
+        setAllUsers([]);
+        setIsLoading(false);
+      }
+      await refreshLeaders();
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [refreshUsers, refreshLeaders]);
 
   const login = useCallback(async (email: string, password: string): Promise<User> => {
-    const { token, user } = await api.post<{ token: string; user: User }>('/auth/login', { email, password });
-    await setToken(token);
-    setCurrentUser(user);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    if (!data.user) throw new Error("No user returned");
+
+    const { data: profile, error: profileErr } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', data.user.id)
+      .single();
+    if (profileErr) throw profileErr;
+
+    const userObj: User = {
+      id: profile.id,
+      name: profile.name,
+      email: profile.email,
+      role: profile.role as UserRole,
+      status: profile.status as UserStatus,
+      streak: profile.streak,
+      points: profile.points,
+      completionRate: profile.completion_rate,
+      consistency: profile.consistency,
+      joinedAt: profile.joined_at,
+      title: profile.title,
+      leaderId: profile.leader_id || undefined,
+      leaderName: profile.leader_name || undefined,
+      sponsorId: profile.sponsor_id || undefined,
+      sponsorName: profile.sponsor_name || undefined,
+      rejectionReason: profile.rejection_reason || undefined,
+    };
+
+    setCurrentUser(userObj);
+    if (userObj.role === 'admin') await refreshUsers();
     await refreshLeaders();
-    if (user.role === 'admin') await refreshUsers();
-    return user;
-  }, [refreshLeaders, refreshUsers]);
+    return userObj;
+  }, [refreshUsers, refreshLeaders]);
 
   const register = useCallback(async (
-    name: string, email: string, password: string, role: UserRole,
-    leaderId?: string, leaderName?: string, sponsorId?: string, sponsorName?: string, adminCode?: string,
+    name: string,
+    email: string,
+    password: string,
+    role: UserRole,
+    leaderId?: string,
+    leaderName?: string,
+    sponsorId?: string,
+    sponsorName?: string,
+    adminCode?: string,
   ): Promise<User> => {
-    const { token, user } = await api.post<{ token: string; user: User }>('/auth/register', {
-      name, email, password, role, leaderId, leaderName, sponsorId, sponsorName, adminCode,
-    });
-    await setToken(token);
-    setCurrentUser(user);
+    if (role === 'admin') {
+      if (adminCode !== 'GOGETTERS2024') {
+        throw new Error("Invalid admin setup code");
+      }
+
+      // Check if an Admin already exists in the database
+      const { data: existingAdmins, error: checkErr } = await supabase
+        .from('users')
+        .select('id')
+        .eq('role', 'admin')
+        .limit(1);
+
+      if (checkErr) {
+        console.error("Failed to verify existing admins:", checkErr);
+      } else if (existingAdmins && existingAdmins.length > 0) {
+        throw new Error("Admin registration is closed. An Administrator already exists.");
+      }
+    }
+
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) throw error;
+    if (!data.user) throw new Error("Registration failed");
+
+    // Insert user into custom public.users table
+    const statusVal = (role === 'admin' || adminCode === 'GOGETTERS2024') ? 'approved' : 'pending';
+    const profileData = {
+      id: data.user.id,
+      name,
+      email,
+      role,
+      status: statusVal,
+      streak: 0,
+      points: 0,
+      completion_rate: 0,
+      consistency: 0,
+      joined_at: new Date().toISOString(),
+      leader_id: leaderId || null,
+      leader_name: leaderName || null,
+      sponsor_id: sponsorId || null,
+      sponsor_name: sponsorName || null,
+    };
+
+    const { error: insertErr } = await supabase.from('users').insert(profileData);
+    if (insertErr) throw insertErr;
+
+    const userObj: User = {
+      id: profileData.id,
+      name: profileData.name,
+      email: profileData.email,
+      role: profileData.role as UserRole,
+      status: profileData.status as UserStatus,
+      streak: 0,
+      points: 0,
+      completionRate: 0,
+      consistency: 0,
+      joinedAt: profileData.joined_at,
+      leaderId: profileData.leader_id || undefined,
+      leaderName: profileData.leader_name || undefined,
+      sponsorId: profileData.sponsor_id || undefined,
+      sponsorName: profileData.sponsor_name || undefined,
+    };
+
+    setCurrentUser(userObj);
     await refreshLeaders();
-    return user;
+    return userObj;
   }, [refreshLeaders]);
 
   const logout = useCallback(async () => {
-    try { await api.post('/auth/logout'); } catch {}
-    await clearToken();
+    const { error } = await supabase.auth.signOut();
+    if (error) console.error("Signout error on mobile:", error);
     setCurrentUser(null);
     setAllUsers([]);
   }, []);
 
   const updateUser = useCallback(async (updates: Partial<User>) => {
     if (!currentUser) return;
-    const { user } = await api.patch<{ user: User }>(`/users/${currentUser.id}`, updates);
-    setCurrentUser(user);
-    await AsyncStorage.setItem('gg_cached_user', JSON.stringify(user));
+
+    // Map object camelCase keys to snake_case for DB columns
+    const dbUpdates: Record<string, any> = {};
+    if (updates.name !== undefined) dbUpdates.name = updates.name;
+    if (updates.email !== undefined) dbUpdates.email = updates.email;
+    if (updates.role !== undefined) dbUpdates.role = updates.role;
+    if (updates.status !== undefined) dbUpdates.status = updates.status;
+    if (updates.streak !== undefined) dbUpdates.streak = updates.streak;
+    if (updates.points !== undefined) dbUpdates.points = updates.points;
+    if (updates.completionRate !== undefined) dbUpdates.completion_rate = updates.completionRate;
+    if (updates.consistency !== undefined) dbUpdates.consistency = updates.consistency;
+    if (updates.title !== undefined) dbUpdates.title = updates.title;
+    if (updates.leaderId !== undefined) dbUpdates.leader_id = updates.leaderId;
+    if (updates.leaderName !== undefined) dbUpdates.leader_name = updates.leaderName;
+    if (updates.sponsorId !== undefined) dbUpdates.sponsor_id = updates.sponsorId;
+    if (updates.sponsorName !== undefined) dbUpdates.sponsor_name = updates.sponsorName;
+    if (updates.rejectionReason !== undefined) dbUpdates.rejection_reason = updates.rejectionReason;
+
+    const { error } = await supabase
+      .from('users')
+      .update(dbUpdates)
+      .eq('id', currentUser.id);
+
+    if (error) throw error;
+
+    const updatedUser = { ...currentUser, ...updates };
+    setCurrentUser(updatedUser);
+    setAllUsers((prev) => prev.map((u) => (u.id === currentUser.id ? updatedUser : u)));
   }, [currentUser]);
 
   const approveUser = useCallback(async (id: string) => {
-    const { user } = await api.post<{ user: User }>(`/users/${id}/approve`);
-    setAllUsers((prev) => prev.map((u) => u.id === id ? user : u));
-    if (currentUser?.id === id) setCurrentUser(user);
+    const { error } = await supabase
+      .from('users')
+      .update({ status: 'approved' })
+      .eq('id', id);
+
+    if (error) throw error;
+
+    setAllUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status: 'approved' as const } : u)));
+    if (currentUser?.id === id) {
+      setCurrentUser((prev) => (prev ? { ...prev, status: 'approved' as const } : null));
+    }
   }, [currentUser]);
 
   const rejectUser = useCallback(async (id: string, reason: string) => {
-    const { user } = await api.post<{ user: User }>(`/users/${id}/reject`, { reason });
-    setAllUsers((prev) => prev.map((u) => u.id === id ? user : u));
-    if (currentUser?.id === id) setCurrentUser(user);
+    const { error } = await supabase
+      .from('users')
+      .update({ status: 'rejected', rejection_reason: reason })
+      .eq('id', id);
+
+    if (error) throw error;
+
+    setAllUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status: 'rejected' as const, rejectionReason: reason } : u)));
+    if (currentUser?.id === id) {
+      setCurrentUser((prev) => (prev ? { ...prev, status: 'rejected' as const, rejectionReason: reason } : null));
+    }
   }, [currentUser]);
 
   return (
     <AuthContext.Provider value={{
       currentUser, isLoading, allUsers, leaders, pendingUsers,
-      login, register, logout, updateUser, approveUser, rejectUser,
+      login, register, logout, updateUser, approveUser, rejectUser, refreshUsers,
     }}>
       {children}
     </AuthContext.Provider>

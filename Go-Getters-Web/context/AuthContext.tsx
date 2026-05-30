@@ -230,7 +230,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       points: 0,
       completion_rate: 0,
       consistency: 0,
-      joined_at: new Date().toLocaleDateString(),
+      joined_at: new Date().toISOString(),
       leader_id: leaderId || null,
       leader_name: leaderName || null,
       sponsor_id: sponsorId || null,
