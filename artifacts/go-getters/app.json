@@ -14,9 +14,12 @@
       "backgroundColor": "#0d0d0f"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.shollymighty.gogetters"
     },
-    "android": {},
+    "android": {
+      "package": "com.shollymighty.gogetters"
+    },
     "web": {
       "favicon": "./assets/images/favicon.png"
     },
@@ -33,6 +36,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "dfa4a6e5-2fa6-49be-8231-6c73cebc696e"
+      }
+    },
+    "owner": "shollymighty"
   }
 }
