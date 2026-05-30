@@ -20,13 +20,21 @@ const REJECTION_REASONS = [
 ];
 
 export default function Admin() {
-  const { currentUser, allUsers, pendingUsers, approveUser, rejectUser } = useAuth();
+  const { currentUser, allUsers, pendingUsers, approveUser, rejectUser, adminUpdateUser } = useAuth();
   const { teamMembers } = useApp();
   const [, setLocation] = useLocation();
   const [tab, setTab] = useState<Tab>("members");
   const [search, setSearch] = useState("");
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState(REJECTION_REASONS[0]);
+
+  // Connection states
+  const [selectedUser, setSelectedUser] = useState<any | null>(null);
+  const [isApproving, setIsApproving] = useState(false);
+  const [manageModalOpen, setManageModalOpen] = useState(false);
+  const [assignedLeaderId, setAssignedLeaderId] = useState("none");
+  const [assignedSponsorName, setAssignedSponsorName] = useState("");
+  const [assignedSponsorId, setAssignedSponsorId] = useState<string | null>(null);
 
   if (!currentUser || currentUser.role !== "admin") {
     setLocation("/dashboard");
@@ -50,6 +58,49 @@ export default function Admin() {
     rejectUser(rejectId, rejectReason);
     setRejectId(null);
     setRejectReason(REJECTION_REASONS[0]);
+  };
+
+  const handleSaveConnection = async () => {
+    if (!selectedUser) return;
+    try {
+      const selectedLeader = approvedUsers.find(u => u.id === assignedLeaderId);
+      const leaderId = selectedLeader ? selectedLeader.id : null;
+      const leaderName = selectedLeader ? selectedLeader.name : null;
+
+      // Handle Sponsor Matching
+      let sponsorId = assignedSponsorId;
+      let sponsorName = assignedSponsorName.trim() || null;
+      if (sponsorName) {
+        const exactMatch = approvedUsers.find(
+          u => u.name.trim().toLowerCase() === sponsorName!.toLowerCase()
+        );
+        if (exactMatch) {
+          sponsorId = exactMatch.id;
+          sponsorName = exactMatch.name;
+        } else {
+          sponsorId = null;
+        }
+      } else {
+        sponsorId = null;
+        sponsorName = null;
+      }
+
+      if (isApproving) {
+        await approveUser(selectedUser.id);
+      }
+
+      await adminUpdateUser(selectedUser.id, {
+        leaderId: leaderId || undefined,
+        leaderName: leaderName || undefined,
+        sponsorId: sponsorId || undefined,
+        sponsorName: sponsorName || undefined
+      });
+
+      setManageModalOpen(false);
+      setSelectedUser(null);
+    } catch (err) {
+      console.error("Failed to save connections:", err);
+    }
   };
 
   const roleData = [
@@ -118,6 +169,7 @@ export default function Admin() {
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Role</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground hidden md:table-cell">Status</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground hidden lg:table-cell">Joined</th>
+                  <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -141,6 +193,23 @@ export default function Admin() {
                     </td>
                     <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">
                       {new Date(u.joinedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedUser(u);
+                          setIsApproving(false);
+                          setAssignedLeaderId(u.leaderId || "none");
+                          setAssignedSponsorName(u.sponsorName || "");
+                          setAssignedSponsorId(u.sponsorId || null);
+                          setManageModalOpen(true);
+                        }}
+                        className="text-primary hover:text-primary/80 font-bold"
+                      >
+                        Manage
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -225,7 +294,14 @@ export default function Admin() {
                     </div>
                     <div className="flex gap-3">
                       <Button
-                        onClick={() => approveUser(user.id)}
+                        onClick={() => {
+                          setSelectedUser(user);
+                          setIsApproving(true);
+                          setAssignedLeaderId("none");
+                          setAssignedSponsorName(user.sponsorName || "");
+                          setAssignedSponsorId(user.sponsorId || null);
+                          setManageModalOpen(true);
+                        }}
                         className="flex-1 gap-2 font-bold"
                         data-testid={`button-approve-${user.id}`}
                       >
@@ -334,6 +410,52 @@ export default function Admin() {
             </div>
             <Button variant="destructive" onClick={handleReject} className="w-full font-bold" data-testid="button-confirm-reject">
               Reject Application
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage Connection (Assign Leader/Sponsor) Dialog */}
+      <Dialog open={manageModalOpen} onOpenChange={(open) => { if (!open) { setManageModalOpen(false); setSelectedUser(null); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{isApproving ? "Approve & Connect Member" : "Manage Member Connections"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div>
+              <label className="block text-sm font-medium mb-1">Select Team Leader</label>
+              <select
+                value={assignedLeaderId}
+                onChange={(e) => setAssignedLeaderId(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="none">None / No Leader</option>
+                {approvedUsers.map((u) => (
+                  <option key={`opt-leader-${u.id}`} value={u.id}>
+                    {u.name} ({u.role})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Sponsor</label>
+              <Input
+                value={assignedSponsorName}
+                onChange={(e) => {
+                  setAssignedSponsorName(e.target.value);
+                  setAssignedSponsorId(null);
+                }}
+                placeholder="Type sponsor's name..."
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                If the typed sponsor name exactly matches an approved member, they will be linked as sponsor in the system.
+              </p>
+            </div>
+
+            <Button onClick={handleSaveConnection} className="w-full font-bold mt-2">
+              {isApproving ? "Approve & Save" : "Save Connections"}
             </Button>
           </div>
         </DialogContent>

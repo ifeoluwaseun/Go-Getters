@@ -89,10 +89,7 @@ export default function LoginScreen() {
             </View>
           </View>
 
-          <View style={[styles.hintBox, { backgroundColor: colors.primary + "12", borderColor: colors.primary + "30" }]}>
-            <Ionicons name="information-circle-outline" size={15} color={colors.primary} />
-            <Text style={[styles.hintText, { color: colors.primary }]}>Try: admin@gogetters.app or leader@gogetters.app</Text>
-          </View>
+
 
           <TouchableOpacity style={[styles.loginBtn, { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1 }]} onPress={handleLogin} disabled={loading} activeOpacity={0.85}>
             <Text style={[styles.loginText, { color: colors.primaryForeground }]}>{loading ? "Signing in..." : "Sign In"}</Text>

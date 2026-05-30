@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Alert } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Alert, Modal, TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
@@ -21,8 +21,61 @@ export default function AdminScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { tasks, evidence, leaderboard, approveEvidence, rejectEvidence } = useApp();
-  const { pendingUsers, approveUser, rejectUser } = useAuth();
+  const { pendingUsers, approveUser, rejectUser, allUsers, adminUpdateUser } = useAuth();
   const [activeTab, setActiveTab] = useState<"overview" | "approvals" | "evidence" | "compliance">("overview");
+
+  // Connection management states
+  const [selectedUser, setSelectedUser] = useState<any | null>(null);
+  const [manageModalVisible, setManageModalVisible] = useState(false);
+  const [assignedLeaderId, setAssignedLeaderId] = useState("none");
+  const [assignedSponsorName, setAssignedSponsorName] = useState("");
+  const [assignedSponsorId, setAssignedSponsorId] = useState<string | null>(null);
+  const [leaderSearch, setLeaderSearch] = useState("");
+  const [showLeaderDropdown, setShowLeaderDropdown] = useState(false);
+
+  const approvedUsers = allUsers.filter(u => u.status === 'approved');
+
+  const handleSaveConnection = async () => {
+    if (!selectedUser) return;
+    try {
+      const selectedLeader = approvedUsers.find(u => u.id === assignedLeaderId);
+      const leaderId = selectedLeader ? selectedLeader.id : null;
+      const leaderName = selectedLeader ? selectedLeader.name : null;
+
+      // Handle Sponsor Matching
+      let sponsorId = assignedSponsorId;
+      let sponsorName = assignedSponsorName.trim() || null;
+      if (sponsorName) {
+        const exactMatch = approvedUsers.find(
+          u => u.name.trim().toLowerCase() === sponsorName!.toLowerCase()
+        );
+        if (exactMatch) {
+          sponsorId = exactMatch.id;
+          sponsorName = exactMatch.name;
+        } else {
+          sponsorId = null;
+        }
+      } else {
+        sponsorId = null;
+        sponsorName = null;
+      }
+
+      await approveUser(selectedUser.id);
+
+      await adminUpdateUser(selectedUser.id, {
+        leaderId: leaderId || undefined,
+        leaderName: leaderName || undefined,
+        sponsorId: sponsorId || undefined,
+        sponsorName: sponsorName || undefined
+      });
+
+      setManageModalVisible(false);
+      setSelectedUser(null);
+    } catch (err) {
+      console.error("Failed to approve and save connections on mobile:", err);
+      Alert.alert("Error", "Failed to complete approval and save connections.");
+    }
+  };
 
   const botPad = Platform.OS === "web" ? 34 : insets.bottom;
   const totalUsers = leaderboard.length + INACTIVE_USERS.length;
@@ -231,7 +284,15 @@ export default function AdminScreen() {
                         <Ionicons name="close-circle-outline" size={16} color={colors.error} />
                         <Text style={[styles.rejectBtnText, { color: colors.error }]}>Reject</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity onPress={() => handleApproveUser(user.id, user.name)} activeOpacity={0.8}
+                      <TouchableOpacity onPress={() => {
+                        setSelectedUser(user);
+                        setAssignedLeaderId("none");
+                        setAssignedSponsorName(user.sponsorName || "");
+                        setAssignedSponsorId(user.sponsorId || null);
+                        setLeaderSearch("");
+                        setShowLeaderDropdown(false);
+                        setManageModalVisible(true);
+                      }} activeOpacity={0.8}
                         style={[styles.approveBtn, { backgroundColor: colors.success }]}>
                         <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
                         <Text style={styles.approveBtnText}>Approve Access</Text>
@@ -335,6 +396,107 @@ export default function AdminScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* Approve & Assign Connections Modal */}
+      <Modal visible={manageModalVisible} transparent animationType="slide" onRequestClose={() => setManageModalVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalSheet, { backgroundColor: colors.background, paddingBottom: insets.bottom + 20 }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Approve & Connect Member</Text>
+              <TouchableOpacity onPress={() => setManageModalVisible(false)} activeOpacity={0.7}>
+                <Ionicons name="close" size={22} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }} keyboardShouldPersistTaps="handled">
+              <View>
+                <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Assign Team Leader</Text>
+                <TouchableOpacity
+                  onPress={() => setShowLeaderDropdown(!showLeaderDropdown)}
+                  style={[styles.pickerBtn, { backgroundColor: colors.muted, borderColor: colors.border }]}
+                >
+                  <Ionicons name="shield-checkmark-outline" size={18} color={colors.mutedForeground} />
+                  <Text style={[styles.pickerText, { color: assignedLeaderId !== "none" ? approvedUsers.find(u => u.id === assignedLeaderId)?.name : "Select Team Leader..."} ]}>
+                    {assignedLeaderId !== "none" ? approvedUsers.find(u => u.id === assignedLeaderId)?.name : "Select Team Leader..."}
+                  </Text>
+                  <Ionicons name={showLeaderDropdown ? "chevron-up" : "chevron-down"} size={16} color={colors.mutedForeground} />
+                </TouchableOpacity>
+
+                {showLeaderDropdown && (
+                  <View style={{
+                    borderColor: colors.border,
+                    borderWidth: 1,
+                    borderRadius: 12,
+                    marginTop: 6,
+                    backgroundColor: colors.card,
+                    maxHeight: 180,
+                  }}>
+                    <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 180 }}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setAssignedLeaderId("none");
+                          setShowLeaderDropdown(false);
+                        }}
+                        style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: colors.border }}
+                      >
+                        <Text style={{ color: colors.mutedForeground, fontStyle: "italic", fontSize: 14 }}>None / No Leader</Text>
+                      </TouchableOpacity>
+                      {approvedUsers.map((u) => (
+                        <TouchableOpacity
+                          key={`lead-select-${u.id}`}
+                          onPress={() => {
+                            setAssignedLeaderId(u.id);
+                            setShowLeaderDropdown(false);
+                          }}
+                          style={{
+                            padding: 12,
+                            borderBottomWidth: 1,
+                            borderBottomColor: colors.border,
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            alignItems: "center"
+                          }}
+                        >
+                          <Text style={{ color: colors.foreground, fontSize: 14 }}>{u.name} ({ROLE_LABELS[u.role] || u.role})</Text>
+                          {assignedLeaderId === u.id && <Ionicons name="checkmark" size={16} color={colors.primary} />}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+
+              <View>
+                <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Sponsor</Text>
+                <View style={[styles.inputWrap, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+                  <Ionicons name="person-add-outline" size={18} color={colors.mutedForeground} />
+                  <TextInput
+                    style={[styles.input, { color: colors.foreground }]}
+                    placeholder="Type sponsor's name..."
+                    placeholderTextColor={colors.mutedForeground}
+                    value={assignedSponsorName}
+                    onChangeText={(text) => {
+                      setAssignedSponsorName(text);
+                      setAssignedSponsorId(null);
+                    }}
+                  />
+                </View>
+                <Text style={{ color: colors.mutedForeground, fontSize: 11, marginTop: 4, lineHeight: 16 }}>
+                  If the sponsor matches an existing approved member's name exactly, they will be automatically linked.
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                onPress={handleSaveConnection}
+                activeOpacity={0.8}
+                style={[styles.btn, { backgroundColor: colors.primary, marginTop: 10, paddingVertical: 14 }]}
+              >
+                <Text style={[styles.btnText, { color: colors.primaryForeground }]}>Confirm & Approve</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -411,4 +573,15 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: "row", gap: 10 },
   smallBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, borderRadius: 8, borderWidth: 1, paddingVertical: 8 },
   smallBtnText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  modalBackdrop: { flex: 1, backgroundColor: "#00000066", justifyContent: "flex-end" },
+  modalSheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "75%" },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 18, borderBottomWidth: 1 },
+  modalTitle: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  fieldLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold", marginBottom: 6 },
+  pickerBtn: { flexDirection: "row", alignItems: "center", borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 13, gap: 10 },
+  pickerText: { fontSize: 14, fontFamily: "Inter_400Regular" },
+  inputWrap: { flexDirection: "row", alignItems: "center", borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 13, gap: 10 },
+  input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
+  btn: { borderRadius: 14, paddingVertical: 16, alignItems: "center", marginBottom: 16 },
+  btnText: { fontSize: 16, fontFamily: "Inter_700Bold" },
 });

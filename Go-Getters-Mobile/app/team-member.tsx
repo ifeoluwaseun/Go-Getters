@@ -65,9 +65,58 @@ export default function TeamMemberScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { teamMembers, teamMessages, sendTeamMessage, approveEvidence, rejectEvidence } = useApp();
-  const { currentUser } = useAuth();
+  const { currentUser, allUsers, adminUpdateUser } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
   const [msgText, setMsgText] = useState("");
+
+  // Connection states for Admin manage modal
+  const [manageModalVisible, setManageModalVisible] = useState(false);
+  const [assignedLeaderId, setAssignedLeaderId] = useState("none");
+  const [assignedSponsorName, setAssignedSponsorName] = useState("");
+  const [assignedSponsorId, setAssignedSponsorId] = useState<string | null>(null);
+  const [showLeaderDropdown, setShowLeaderDropdown] = useState(false);
+
+  const approvedUsers = (allUsers || []).filter(u => u.status === 'approved');
+
+  const handleSaveConnection = async () => {
+    if (!member) return;
+    try {
+      const selectedLeader = approvedUsers.find(u => u.id === assignedLeaderId);
+      const leaderId = selectedLeader ? selectedLeader.id : null;
+      const leaderName = selectedLeader ? selectedLeader.name : null;
+
+      // Handle Sponsor Matching
+      let sponsorId = assignedSponsorId;
+      let sponsorName = assignedSponsorName.trim() || null;
+      if (sponsorName) {
+        const exactMatch = approvedUsers.find(
+          u => u.name.trim().toLowerCase() === sponsorName!.toLowerCase()
+        );
+        if (exactMatch) {
+          sponsorId = exactMatch.id;
+          sponsorName = exactMatch.name;
+        } else {
+          sponsorId = null;
+        }
+      } else {
+        sponsorId = null;
+        sponsorName = null;
+      }
+
+      await adminUpdateUser(member.id, {
+        leaderId: leaderId || undefined,
+        leaderName: leaderName || undefined,
+        sponsorId: sponsorId || undefined,
+        sponsorName: sponsorName || undefined
+      });
+
+      setManageModalVisible(false);
+      Alert.alert("Success", "Member connections updated successfully.");
+    } catch (err) {
+      console.error("Failed to save connections:", err);
+      Alert.alert("Error", "Failed to update member connections.");
+    }
+  };
   const [msgType, setMsgType] = useState<TeamMessage["type"]>("message");
   const listRef = useRef<FlatList>(null);
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
@@ -181,6 +230,22 @@ export default function TeamMemberScreen() {
           <Ionicons name="chatbubble-outline" size={15} color="#a855f7" />
           <Text style={[styles.actionText, { color: "#a855f7" }]}>Message</Text>
         </TouchableOpacity>
+        {currentUser?.role === "admin" && (
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: "#00d8fe18", borderColor: "#00d8fe44" }]}
+            onPress={() => {
+              setAssignedLeaderId(member.leaderId || "none");
+              setAssignedSponsorName(member.sponsorName || "");
+              setAssignedSponsorId(member.sponsorId || null);
+              setShowLeaderDropdown(false);
+              setManageModalVisible(true);
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="settings-outline" size={15} color="#00d8fe" />
+            <Text style={[styles.actionText, { color: "#00d8fe" }]}>Manage</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Tabs */}
@@ -591,6 +656,132 @@ export default function TeamMemberScreen() {
                 <Text style={[styles.modalBtnText, { color: "#fff", fontFamily: "Inter_700Bold" }]}>Reject</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Admin Manage Connections Modal */}
+      <Modal visible={manageModalVisible} transparent animationType="slide" onRequestClose={() => setManageModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card, borderColor: colors.border, width: "100%", maxWidth: 360 }]}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomColor: colors.border, borderBottomWidth: 1, paddingBottom: 10 }}>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Manage Member Connections</Text>
+              <TouchableOpacity onPress={() => setManageModalVisible(false)} activeOpacity={0.7}>
+                <Ionicons name="close" size={22} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={{ gap: 16, paddingTop: 10 }} keyboardShouldPersistTaps="handled">
+              <View>
+                <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.foreground, marginBottom: 6 }}>Assign Team Leader</Text>
+                <TouchableOpacity
+                  onPress={() => setShowLeaderDropdown(!showLeaderDropdown)}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    backgroundColor: colors.muted,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <Ionicons name="shield-checkmark-outline" size={18} color={colors.mutedForeground} style={{ marginRight: 8 }} />
+                  <Text style={{ color: assignedLeaderId !== "none" ? colors.foreground : colors.mutedForeground, flex: 1, fontSize: 14 }}>
+                    {assignedLeaderId !== "none" ? approvedUsers.find(u => u.id === assignedLeaderId)?.name : "Select Team Leader..."}
+                  </Text>
+                  <Ionicons name={showLeaderDropdown ? "chevron-up" : "chevron-down"} size={16} color={colors.mutedForeground} />
+                </TouchableOpacity>
+
+                {showLeaderDropdown && (
+                  <View style={{
+                    borderColor: colors.border,
+                    borderWidth: 1,
+                    borderRadius: 12,
+                    marginTop: 6,
+                    backgroundColor: colors.card,
+                    maxHeight: 180,
+                  }}>
+                    <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 180 }}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setAssignedLeaderId("none");
+                          setShowLeaderDropdown(false);
+                        }}
+                        style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: colors.border }}
+                      >
+                        <Text style={{ color: colors.mutedForeground, fontStyle: "italic", fontSize: 14 }}>None / No Leader</Text>
+                      </TouchableOpacity>
+                      {approvedUsers.map((u) => (
+                        <TouchableOpacity
+                          key={`lead-select-tm-${u.id}`}
+                          onPress={() => {
+                            setAssignedLeaderId(u.id);
+                            setShowLeaderDropdown(false);
+                          }}
+                          style={{
+                            padding: 12,
+                            borderBottomWidth: 1,
+                            borderBottomColor: colors.border,
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            alignItems: "center"
+                          }}
+                        >
+                          <Text style={{ color: colors.foreground, fontSize: 14 }}>{u.name} ({ROLE_LABELS[u.role] || u.role})</Text>
+                          {assignedLeaderId === u.id && <Ionicons name="checkmark" size={16} color={colors.primary} />}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+
+              <View>
+                <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.foreground, marginBottom: 6 }}>Sponsor</Text>
+                <View style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  backgroundColor: colors.muted,
+                  borderColor: colors.border,
+                  gap: 10
+                }}>
+                  <Ionicons name="person-add-outline" size={18} color={colors.mutedForeground} />
+                  <TextInput
+                    style={{ flex: 1, color: colors.foreground, fontSize: 14 }}
+                    placeholder="Type sponsor's name..."
+                    placeholderTextColor={colors.mutedForeground}
+                    value={assignedSponsorName}
+                    onChangeText={(text) => {
+                      setAssignedSponsorName(text);
+                      setAssignedSponsorId(null);
+                    }}
+                  />
+                </View>
+                <Text style={{ color: colors.mutedForeground, fontSize: 11, marginTop: 4, lineHeight: 16 }}>
+                  If the sponsor matches an existing approved member's name exactly, they will be automatically linked.
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                onPress={handleSaveConnection}
+                activeOpacity={0.8}
+                style={{
+                  borderRadius: 14,
+                  paddingVertical: 14,
+                  alignItems: "center",
+                  backgroundColor: colors.primary,
+                  marginTop: 10
+                }}
+              >
+                <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: colors.primaryForeground }}>Save Connections</Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>

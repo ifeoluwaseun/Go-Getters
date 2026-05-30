@@ -114,7 +114,7 @@ export default function PendingApprovalScreen() {
         <View style={[styles.nextSteps, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.nextTitle, { color: colors.foreground }]}>What happens next?</Text>
           {[
-            { icon: "checkmark-circle-outline", text: "Your leader has been notified of your application", color: colors.success },
+            { icon: "checkmark-circle-outline", text: "Admins have been notified of your application", color: colors.success },
             { icon: "shield-checkmark-outline", text: "An admin will review your details shortly", color: colors.primary },
             { icon: "notifications-outline", text: "You'll get access as soon as you're approved", color: "#fbbf24" },
           ].map((step, i) => (

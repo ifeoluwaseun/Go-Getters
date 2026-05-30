@@ -1,34 +1,61 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link } from "wouter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserRole } from "@/context/types";
+import { createClient } from "@/lib/supabase/client";
 
 export default function Register() {
-  const { register, leaders } = useAuth();
+  const { register } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<UserRole>("member");
-  const [leaderId, setLeaderId] = useState<string>("none");
-  const [sponsorId, setSponsorId] = useState<string>("none");
+  const [sponsorName, setSponsorName] = useState("");
+  const [sponsorId, setSponsorId] = useState<string | undefined>(undefined);
+  const [existingUsers, setExistingUsers] = useState<{ id: string; name: string }[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [adminCode, setAdminCode] = useState("");
   const [showAdmin, setShowAdmin] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const supabase = createClient();
+        const { data } = await supabase.from('users').select('id, name').eq('status', 'approved');
+        if (data) setExistingUsers(data);
+      } catch (err) {
+        console.error("Failed to load approved users for registration suggestions:", err);
+      }
+    };
+    fetchUsers();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const lId = leaderId !== "none" ? leaderId : undefined;
-      const lName = lId ? leaders.find(l => l.id === lId)?.name : undefined;
-      const sId = sponsorId !== "none" ? sponsorId : undefined;
-      const sName = sId ? leaders.find(l => l.id === sId)?.name : undefined;
-      await register(name, email, password, role, lId, lName, sId, sName, adminCode || undefined);
+      let finalSponsorId = sponsorId;
+      let finalSponsorName = sponsorName.trim() || undefined;
+
+      if (finalSponsorName) {
+        const exactMatch = existingUsers.find(
+          u => u.name.trim().toLowerCase() === finalSponsorName!.toLowerCase()
+        );
+        if (exactMatch) {
+          finalSponsorId = exactMatch.id;
+          finalSponsorName = exactMatch.name;
+        }
+      } else {
+        finalSponsorId = undefined;
+      }
+
+      await register(name, email, password, role, undefined, undefined, finalSponsorId, finalSponsorName, adminCode || undefined);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
@@ -76,37 +103,44 @@ export default function Register() {
               </div>
 
               <div className="pt-2 border-t border-border">
-                <h3 className="font-semibold mb-3">Team Connections</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Your Leader</label>
-                    <Select value={leaderId} onValueChange={setLeaderId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a leader" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Select...</SelectItem>
-                        {leaders.map(l => (
-                          <SelectItem key={`l-${l.id}`} value={l.id}>{l.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Your Sponsor (Optional)</label>
-                    <Select value={sponsorId} onValueChange={setSponsorId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a sponsor" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        {leaders.map(l => (
-                          <SelectItem key={`s-${l.id}`} value={l.id}>{l.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="relative">
+                  <label className="block text-sm font-medium mb-1">Your Sponsor (Optional)</label>
+                  <Input
+                    value={sponsorName}
+                    onChange={e => {
+                      setSponsorName(e.target.value);
+                      setSponsorId(undefined);
+                      setShowSuggestions(true);
+                    }}
+                    onFocus={() => setShowSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                    placeholder="Type to search or enter manually..."
+                    className="w-full"
+                  />
+                  {showSuggestions && sponsorName.trim() && (
+                    <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                      {existingUsers.filter(u => u.name.toLowerCase().includes(sponsorName.toLowerCase())).length > 0 ? (
+                        existingUsers
+                          .filter(u => u.name.toLowerCase().includes(sponsorName.toLowerCase()))
+                          .map(u => (
+                            <button
+                              key={u.id}
+                              type="button"
+                              onClick={() => {
+                                setSponsorName(u.name);
+                                setSponsorId(u.id);
+                                setShowSuggestions(false);
+                              }}
+                              className="w-full text-left px-4 py-2 hover:bg-accent/50 text-sm transition-colors first:rounded-t-lg last:rounded-b-lg font-medium"
+                            >
+                              {u.name}
+                            </button>
+                          ))
+                      ) : (
+                        <div className="px-4 py-2 text-sm text-muted-foreground italic">No matches found, will use manual text.</div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 

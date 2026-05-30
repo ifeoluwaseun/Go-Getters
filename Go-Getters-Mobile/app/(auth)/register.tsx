@@ -93,16 +93,21 @@ function DropdownPicker({ label, placeholder, value, options, onSelect, required
   );
 }
 
+import { supabase } from "@/lib/supabase";
+import { useEffect } from "react";
+
 export default function RegisterScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { register, leaders } = useAuth();
+  const { register } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<UserRole>("member");
-  const [selectedLeader, setSelectedLeader] = useState<LeaderOption | null>(null);
-  const [selectedSponsor, setSelectedSponsor] = useState<LeaderOption | null>(null);
+  const [sponsorName, setSponsorName] = useState("");
+  const [sponsorId, setSponsorId] = useState<string | undefined>(undefined);
+  const [existingUsers, setExistingUsers] = useState<{ id: string; name: string }[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [adminCode, setAdminCode] = useState("");
   const [showAdminCode, setShowAdminCode] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -110,23 +115,49 @@ export default function RegisterScreen() {
   const topPad = Platform.OS === "web" ? 20 : insets.top;
   const botPad = Platform.OS === "web" ? 34 : insets.bottom;
 
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const { data } = await supabase.from('users').select('id, name').eq('status', 'approved');
+        if (data) setExistingUsers(data);
+      } catch (err) {
+        console.error("Failed to load approved users:", err);
+      }
+    };
+    fetchUsers();
+  }, []);
+
   async function handleRegister() {
     if (!name.trim()) { Alert.alert("Name required"); return; }
     if (!email.trim()) { Alert.alert("Email required"); return; }
     if (password.length < 6) { Alert.alert("Password must be at least 6 characters"); return; }
-    if (!adminCode && !selectedLeader) { Alert.alert("Please select your Leader"); return; }
 
     setLoading(true);
     try {
+      let finalSponsorId = sponsorId;
+      let finalSponsorName = sponsorName.trim() || undefined;
+
+      if (finalSponsorName) {
+        const exactMatch = existingUsers.find(
+          u => u.name.trim().toLowerCase() === finalSponsorName!.toLowerCase()
+        );
+        if (exactMatch) {
+          finalSponsorId = exactMatch.id;
+          finalSponsorName = exactMatch.name;
+        }
+      } else {
+        finalSponsorId = undefined;
+      }
+
       const user = await register(
         name,
         email,
         password,
         role,
-        selectedLeader?.id,
-        selectedLeader?.name,
-        selectedSponsor?.id,
-        selectedSponsor?.name,
+        undefined,
+        undefined,
+        finalSponsorId,
+        finalSponsorName,
         adminCode || undefined,
       );
 
@@ -135,7 +166,7 @@ export default function RegisterScreen() {
       } else {
         router.replace("/pending-approval");
       }
-    } catch {
+    } catch (err) {
       Alert.alert("Registration failed. Please try again.");
     } finally {
       setLoading(false);
@@ -204,34 +235,72 @@ export default function RegisterScreen() {
           })}
         </View>
 
-        {/* Leader & Sponsor selection */}
-        <View style={[styles.relationshipCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.relationshipHeader}>
-            <Ionicons name="people" size={16} color={colors.primary} />
-            <Text style={[styles.relationshipTitle, { color: colors.foreground }]}>Team Connections</Text>
+        {/* Sponsor input with autocomplete */}
+        <View style={{ marginBottom: 20 }}>
+          <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Your Sponsor (Optional)</Text>
+          <View style={[styles.inputWrap, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+            <Ionicons name="person-add-outline" size={18} color={colors.mutedForeground} />
+            <TextInput
+              style={[styles.input, { color: colors.foreground }]}
+              placeholder="Type to search or enter manually..."
+              placeholderTextColor={colors.mutedForeground}
+              value={sponsorName}
+              onChangeText={(text) => {
+                setSponsorName(text);
+                setSponsorId(undefined);
+                setShowSuggestions(true);
+              }}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+            />
           </View>
-          <Text style={[styles.relationshipSub, { color: colors.mutedForeground }]}>
-            Your leader oversees your progress. Your sponsor is the person who introduced you — they may be the same person or different.
-          </Text>
-
-          <DropdownPicker
-            label="Your Leader"
-            placeholder="Select your Team Leader"
-            value={selectedLeader?.name ?? ""}
-            options={leaders}
-            onSelect={(opt) => setSelectedLeader(opt)}
-            required
-            colors={colors}
-          />
-
-          <DropdownPicker
-            label="Your Sponsor"
-            placeholder="Select your Sponsor (optional)"
-            value={selectedSponsor?.name ?? ""}
-            options={leaders}
-            onSelect={(opt) => setSelectedSponsor(opt)}
-            colors={colors}
-          />
+          {showSuggestions && sponsorName.trim() !== "" && (
+            <View style={{
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderWidth: 1,
+              borderRadius: 12,
+              marginTop: 6,
+              maxHeight: 180,
+              overflow: "hidden",
+              zIndex: 50,
+            }}>
+              <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 180 }}>
+                {existingUsers.filter(u => u.name.toLowerCase().includes(sponsorName.toLowerCase())).length > 0 ? (
+                  existingUsers
+                    .filter(u => u.name.toLowerCase().includes(sponsorName.toLowerCase()))
+                    .map(u => (
+                      <TouchableOpacity
+                        key={u.id}
+                        onPress={() => {
+                          setSponsorName(u.name);
+                          setSponsorId(u.id);
+                          setShowSuggestions(false);
+                        }}
+                        activeOpacity={0.8}
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          paddingHorizontal: 16,
+                          paddingVertical: 12,
+                          borderBottomColor: colors.border,
+                          borderBottomWidth: 1,
+                        }}
+                      >
+                        <Ionicons name="person-outline" size={14} color={colors.primary} style={{ marginRight: 8 }} />
+                        <Text style={{ color: colors.foreground, fontSize: 14 }}>{u.name}</Text>
+                      </TouchableOpacity>
+                    ))
+                ) : (
+                  <View style={{ padding: 12 }}>
+                    <Text style={{ color: colors.mutedForeground, fontSize: 13, fontStyle: "italic" }}>
+                      No matches found. Will use manual text.
+                    </Text>
+                  </View>
+                )}
+              </ScrollView>
+            </View>
+          )}
         </View>
 
         {/* Admin Code (collapsible) */}

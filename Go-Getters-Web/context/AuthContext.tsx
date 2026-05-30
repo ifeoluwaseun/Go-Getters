@@ -27,6 +27,7 @@ export interface AuthContextType {
   approveUser: (id: string) => Promise<void>;
   rejectUser: (id: string, reason: string) => Promise<void>;
   refreshUsers: () => Promise<void>;
+  adminUpdateUser: (userId: string, updates: Partial<User>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -240,6 +241,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error: insertErr } = await supabase.from('users').insert(profileData);
     if (insertErr) throw insertErr;
 
+    // Notify organization owner/admins of the new registration
+    try {
+      const { data: admins } = await supabase
+        .from('users')
+        .select('id')
+        .eq('role', 'admin');
+      
+      if (admins && admins.length > 0) {
+        const notificationsToInsert = admins.map(admin => ({
+          id: Math.random().toString(36).substring(2) + Date.now().toString(36),
+          user_id: admin.id,
+          type: 'announcement',
+          title: 'New Registration',
+          body: `${name} has registered. Please assign a team leader.`,
+          is_read: false,
+          level: 2,
+          created_at: new Date().toISOString(),
+        }));
+        await supabase.from('notifications').insert(notificationsToInsert);
+      }
+    } catch (notifErr) {
+      console.error("Failed to notify admins of new registration:", notifErr);
+    }
+
     const userObj: User = {
       id: profileData.id,
       name: profileData.name,
@@ -329,10 +354,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [currentUser, supabase]);
 
+  const adminUpdateUser = useCallback(async (userId: string, updates: Partial<User>) => {
+    const dbUpdates: Record<string, any> = {};
+    if (updates.name !== undefined) dbUpdates.name = updates.name;
+    if (updates.email !== undefined) dbUpdates.email = updates.email;
+    if (updates.role !== undefined) dbUpdates.role = updates.role;
+    if (updates.status !== undefined) dbUpdates.status = updates.status;
+    if (updates.streak !== undefined) dbUpdates.streak = updates.streak;
+    if (updates.points !== undefined) dbUpdates.points = updates.points;
+    if (updates.completionRate !== undefined) dbUpdates.completion_rate = updates.completionRate;
+    if (updates.consistency !== undefined) dbUpdates.consistency = updates.consistency;
+    if (updates.title !== undefined) dbUpdates.title = updates.title;
+    if (updates.leaderId !== undefined) dbUpdates.leader_id = updates.leaderId;
+    if (updates.leaderName !== undefined) dbUpdates.leader_name = updates.leaderName;
+    if (updates.sponsorId !== undefined) dbUpdates.sponsor_id = updates.sponsorId;
+    if (updates.sponsorName !== undefined) dbUpdates.sponsor_name = updates.sponsorName;
+    if (updates.rejectionReason !== undefined) dbUpdates.rejection_reason = updates.rejectionReason;
+
+    const { error } = await supabase
+      .from('users')
+      .update(dbUpdates)
+      .eq('id', userId);
+
+    if (error) throw error;
+
+    const partialUpdate = { ...updates };
+    setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, ...partialUpdate } : u));
+    if (currentUser?.id === userId) {
+      setCurrentUser(prev => prev ? { ...prev, ...partialUpdate } : null);
+    }
+  }, [currentUser, supabase]);
+
   return (
     <AuthContext.Provider value={{
       currentUser, isLoading, allUsers, pendingUsers, leaders,
-      login, register, logout, updateUser, approveUser, rejectUser, refreshUsers
+      login, register, logout, updateUser, approveUser, rejectUser, refreshUsers, adminUpdateUser
     }}>
       {children}
     </AuthContext.Provider>

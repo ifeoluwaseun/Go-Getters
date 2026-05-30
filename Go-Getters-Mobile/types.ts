@@ -149,6 +149,7 @@ export interface TeamMember {
   role: UserRole;
   leaderId: string;
   sponsorId?: string;
+  sponsorName?: string;
   streak: number;
   points: number;
   completionRate: number;
