@@ -94,12 +94,15 @@ export default function TeamMemberScreen() {
   const messages = teamMessages[member.id] || [];
 
   function handleSendReminder() {
+    if (!member) return;
     Alert.alert("Reminder Sent", `A notification has been sent to ${member.name}.`);
   }
   function handleScheduleCall() {
+    if (!member) return;
     Alert.alert("Call Scheduled", `${member.name} will receive a calendar invite.`);
   }
   function handleSend() {
+    if (!member) return;
     const trimmed = msgText.trim();
     if (!trimmed || !currentUser) return;
     sendTeamMessage(member.id, trimmed, currentUser.id, currentUser.name, msgType);
@@ -199,7 +202,7 @@ export default function TeamMemberScreen() {
                 <Text style={[styles.msgEmptyDesc, { color: colors.mutedForeground }]}>Send {member.name} a message, note, or reminder below.</Text>
               </View>
             }
-            renderItem={({ item }) => {
+            renderItem={({ item }: { item: TeamMessage }) => {
               const conf = MSG_CFG[item.type];
               const isMe = item.senderId === currentUser?.id;
               return (

@@ -126,7 +126,7 @@ export default function TeamScreen() {
   const [filter, setFilter] = useState<Filter>("All");
   const botPad = Platform.OS === "web" ? 34 : insets.bottom;
 
-  if (currentUser?.role !== "leader") {
+  if (currentUser?.role !== "leader" && currentUser?.role !== "admin") {
     return (
       <View style={[styles.locked, { backgroundColor: colors.background }]}>
         <View style={[styles.lockedIcon, { backgroundColor: colors.muted }]}>
