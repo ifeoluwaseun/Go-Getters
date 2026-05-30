@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, FlatList, TextInput,
-  TouchableOpacity, Alert, Platform, KeyboardAvoidingView,
+  TouchableOpacity, Alert, Platform, KeyboardAvoidingView, Modal,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -70,6 +70,9 @@ export default function TeamMemberScreen() {
   const [msgText, setMsgText] = useState("");
   const [msgType, setMsgType] = useState<TeamMessage["type"]>("message");
   const listRef = useRef<FlatList>(null);
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [pendingRejectEvId, setPendingRejectEvId] = useState<string | null>(null);
+  const [rejectFeedback, setRejectFeedback] = useState("");
 
   const botPad = Platform.OS === "web" ? 34 : insets.bottom;
   const member = teamMembers.find((m) => m.id === id);
@@ -116,13 +119,21 @@ export default function TeamMemberScreen() {
     ]);
   }
   function handleReject(evId: string) {
-    Alert.prompt
-      ? Alert.prompt("Reject Evidence", "Add feedback for the member:", (feedback) => {
-          if (feedback) rejectEvidence(evId, feedback);
-        })
-      : Alert.alert("Reject Evidence", "Evidence has been rejected.", [
-          { text: "OK", onPress: () => rejectEvidence(evId, "Does not meet requirements. Please resubmit.") },
-        ]);
+    setPendingRejectEvId(evId);
+    setRejectFeedback("");
+    setRejectModalVisible(true);
+  }
+  function submitRejection() {
+    if (!pendingRejectEvId) return;
+    const trimmedFeedback = rejectFeedback.trim();
+    if (!trimmedFeedback) {
+      Alert.alert("Feedback Required", "Please provide a reason for rejecting the evidence.");
+      return;
+    }
+    rejectEvidence(pendingRejectEvId, trimmedFeedback);
+    setRejectModalVisible(false);
+    setPendingRejectEvId(null);
+    setRejectFeedback("");
   }
 
   const tabBadges: Record<Tab, number | null> = {
@@ -542,6 +553,47 @@ export default function TeamMemberScreen() {
           )}
         </ScrollView>
       )}
+
+      {/* Rejection Feedback Dialog Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={rejectModalVisible}
+        onRequestClose={() => setRejectModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Reject Evidence</Text>
+            <Text style={[styles.modalSubtitle, { color: colors.mutedForeground }]}>
+              Provide constructive feedback to help the member understand what needs correction:
+            </Text>
+            <TextInput
+              style={[styles.modalInput, { backgroundColor: colors.muted, color: colors.foreground, borderColor: colors.border }]}
+              placeholder="E.g., Screenshot is blurry, please upload a clear one."
+              placeholderTextColor={colors.mutedForeground}
+              value={rejectFeedback}
+              onChangeText={setRejectFeedback}
+              multiline
+              numberOfLines={4}
+              maxLength={200}
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: colors.muted }]}
+                onPress={() => setRejectModalVisible(false)}
+              >
+                <Text style={[styles.modalBtnText, { color: colors.foreground }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: colors.error }]}
+                onPress={submitRejection}
+              >
+                <Text style={[styles.modalBtnText, { color: "#fff", fontFamily: "Inter_700Bold" }]}>Reject</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -671,4 +723,12 @@ const styles = StyleSheet.create({
   msgInputRow: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
   msgInput: { flex: 1, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontSize: 14, fontFamily: "Inter_400Regular", maxHeight: 100 },
   sendBtn: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.5)", justifyContent: "center", alignItems: "center", padding: 20 },
+  modalContent: { width: "100%", maxWidth: 340, borderRadius: 16, borderWidth: 1, padding: 20, gap: 14 },
+  modalTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
+  modalSubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 18 },
+  modalInput: { borderRadius: 10, borderWidth: 1, padding: 12, fontSize: 14, fontFamily: "Inter_400Regular", textAlignVertical: "top", height: 80 },
+  modalButtons: { flexDirection: "row", gap: 10 },
+  modalBtn: { flex: 1, borderRadius: 10, paddingVertical: 12, alignItems: "center", justifyContent: "center" },
+  modalBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
 });
