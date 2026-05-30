@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { sendTaskReminderEmail } from "@/lib/resend";
+import { sendNativePushNotification } from "@/lib/push";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -49,6 +50,18 @@ export async function GET(request: Request) {
           created_at: new Date().toLocaleDateString(),
         });
         createdNotifications++;
+
+        // Send a native push notification to their device(s)
+        try {
+          await sendNativePushNotification(
+            supabase,
+            user.id,
+            "Protect Your Streak!",
+            `You still have ${tasks.length} pending task${tasks.length > 1 ? "s" : ""} left today. Execute strong!`
+          );
+        } catch (pushErr) {
+          console.error(`Failed to send native push to user ${user.id}:`, pushErr);
+        }
 
         // Send a Resend email reminder
         try {
