@@ -13,9 +13,21 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import * as Notifications from "expo-notifications";
+import { registerForPushNotificationsAsync } from "@/lib/push";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { AppProvider } from "@/context/AppContext";
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 SplashScreen.preventAutoHideAsync();
 
@@ -43,6 +55,13 @@ function RootLayoutNav() {
 
 function AppWithAuth() {
   const { currentUser } = useAuth();
+
+  useEffect(() => {
+    if (currentUser?.id) {
+      registerForPushNotificationsAsync(currentUser.id);
+    }
+  }, [currentUser]);
+
   return (
     <AppProvider userId={currentUser?.id}>
       <QueryClientProvider client={queryClient}>
