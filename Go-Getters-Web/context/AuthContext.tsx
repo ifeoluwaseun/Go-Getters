@@ -195,8 +195,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sponsorName?: string,
     adminCode?: string
   ): Promise<User> => {
-    if (role === 'admin' && adminCode !== 'GOGETTERS2024') {
-      throw new Error("Invalid admin setup code");
+    if (role === 'admin') {
+      if (adminCode !== 'GOGETTERS2024') {
+        throw new Error("Invalid admin setup code");
+      }
+
+      // Check if an Admin already exists in the database
+      const { data: existingAdmins, error: checkErr } = await supabase
+        .from('users')
+        .select('id')
+        .eq('role', 'admin')
+        .limit(1);
+
+      if (checkErr) {
+        console.error("Failed to verify existing admins:", checkErr);
+      } else if (existingAdmins && existingAdmins.length > 0) {
+        throw new Error("Admin registration is closed. An Administrator already exists.");
+      }
     }
 
     const { data, error } = await supabase.auth.signUp({ email, password });
