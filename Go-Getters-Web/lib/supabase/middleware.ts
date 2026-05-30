@@ -6,46 +6,59 @@ export async function updateSession(request: NextRequest) {
     request,
   });
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet: any[]) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value));
-          supabaseResponse = NextResponse.next({
-            request,
-          });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Retrieve current auth user session
-  const { data: { user } } = await supabase.auth.getUser();
-
-  // Route paths
-  const pathname = request.nextUrl.pathname;
-  const isAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/register');
-  const isStaticAsset = pathname.includes('.') || pathname.startsWith('/_next') || pathname.startsWith('/api');
-
-  if (isStaticAsset) {
+  // Safeguard against missing environment variables on Vercel
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn("Supabase environment variables are missing! Skipping middleware session update.");
     return supabaseResponse;
   }
 
-  // Redirect logic:
-  if (!user && !isAuthRoute && pathname !== '/') {
-    return NextResponse.redirect(new URL('/login', request.url));
-  }
+  try {
+    const supabase = createServerClient(
+      supabaseUrl,
+      supabaseAnonKey,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet: any[]) {
+            cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value));
+            supabaseResponse = NextResponse.next({
+              request,
+            });
+            cookiesToSet.forEach(({ name, value, options }) =>
+              supabaseResponse.cookies.set(name, value, options)
+            );
+          },
+        },
+      }
+    );
 
-  if (user && isAuthRoute) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+    // Retrieve current auth user session
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // Route paths
+    const pathname = request.nextUrl.pathname;
+    const isAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/register');
+    const isStaticAsset = pathname.includes('.') || pathname.startsWith('/_next') || pathname.startsWith('/api');
+
+    if (isStaticAsset) {
+      return supabaseResponse;
+    }
+
+    // Redirect logic:
+    if (!user && !isAuthRoute && pathname !== '/') {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    if (user && isAuthRoute) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+  } catch (error) {
+    console.error("Supabase middleware error:", error);
   }
 
   return supabaseResponse;
