@@ -59,8 +59,20 @@ export default function Register() {
     return () => clearInterval(interval);
   }, [resendCooldown]);
 
-  // Restore pending registration on mount
+  // Restore pending registration on mount or if unconfirmed session exists
   useEffect(() => {
+    if (currentUser && currentUser.status === "unconfirmed") {
+      setEmail(currentUser.email);
+      setRegData({
+        name: currentUser.name || "New User",
+        role: currentUser.role || "member",
+        sponsorId: currentUser.sponsorId,
+        sponsorName: currentUser.sponsorName,
+      });
+      setShowOtp(true);
+      return;
+    }
+
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('gogetters_pending_reg');
       if (saved) {
@@ -74,7 +86,7 @@ export default function Register() {
         }
       }
     }
-  }, []);
+  }, [currentUser]);
 
   // Redirect if logged in and approved/pending
   useEffect(() => {

@@ -16,6 +16,11 @@ export default function Home() {
       return;
     }
 
+    if (currentUser.status === "unconfirmed") {
+      router.replace("/register");
+      return;
+    }
+
     if (currentUser.status === "pending") {
       router.replace("/pending");
       return;
