@@ -329,14 +329,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Send the branded OTP email via Next.js API
-    try {
-      await fetch("/api/auth/send-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, name, code: otpCode }),
-      });
-    } catch (err) {
-      console.error("Failed to send OTP email via Resend/SMTP:", err);
+    const res = await fetch("/api/auth/send-otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, name, code: otpCode }),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || "Failed to deliver confirmation email code.");
     }
 
     const userObj: User = {
@@ -554,11 +554,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("Failed to update OTP metadata in Supabase:", metaErr);
     }
 
-    await fetch("/api/auth/send-otp", {
+    const res = await fetch("/api/auth/send-otp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, name: currentRegData.profileData.name, code: newCode }),
     });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || "Failed to deliver confirmation email code.");
+    }
   }, [pendingRegData, currentUser]);
 
   const logout = useCallback(async () => {
