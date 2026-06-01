@@ -70,6 +70,16 @@ export default function Register() {
         sponsorName: currentUser.sponsorName,
       });
       setShowOtp(true);
+
+      // Automatically send a fresh code if there isn't one already in localStorage
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('gogetters_pending_reg');
+        if (!saved) {
+          resendOtp(currentUser.email, 'signup').catch(err => {
+            console.error("Auto-resend of verification code failed:", err);
+          });
+        }
+      }
       return;
     }
 
@@ -86,7 +96,7 @@ export default function Register() {
         }
       }
     }
-  }, [currentUser]);
+  }, [currentUser, resendOtp]);
 
   // Redirect if logged in and approved/pending
   useEffect(() => {

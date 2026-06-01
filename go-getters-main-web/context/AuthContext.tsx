@@ -381,6 +381,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // Construct if null from currentUser session
+    if (!currentRegState && currentUser && currentUser.status === "unconfirmed") {
+      currentRegState = {
+        email: currentUser.email,
+        otpCode: "",
+        profileData: {
+          name: currentUser.name || "New User",
+          role: currentUser.role || "member",
+          sponsorId: currentUser.sponsorId,
+          sponsorName: currentUser.sponsorName,
+        }
+      };
+    }
+
     if (!currentRegState || currentRegState.email !== email) {
       throw new Error("No pending registration found for this email address");
     }
@@ -488,7 +502,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (userObj.role === 'admin') await refreshUsers();
     await refreshLeaders();
     return userObj;
-  }, [pendingRegData, refreshUsers, refreshLeaders]);
+  }, [pendingRegData, currentUser, refreshUsers, refreshLeaders]);
 
   const resendOtp = useCallback(async (email: string, type: 'signup'): Promise<void> => {
     let currentRegData = pendingRegData;
@@ -503,6 +517,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // If no local storage registration data, construct it from the active unconfirmed user session!
+    if (!currentRegData && currentUser && currentUser.status === "unconfirmed") {
+      currentRegData = {
+        email: currentUser.email,
+        otpCode: "",
+        profileData: {
+          name: currentUser.name || "New User",
+          role: currentUser.role || "member",
+          sponsorId: currentUser.sponsorId,
+          sponsorName: currentUser.sponsorName,
+        }
+      };
+    }
+
     if (!currentRegData || currentRegData.email !== email) {
       throw new Error("No pending registration found for this email address");
     }
@@ -514,12 +542,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('gogetters_pending_reg', JSON.stringify(updatedState));
     }
 
+    // Update custom metadata on the authenticated user record in Supabase Auth!
+    try {
+      await supabase.auth.updateUser({
+        data: {
+          otp_code: newCode,
+          otp_expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        }
+      });
+    } catch (metaErr) {
+      console.error("Failed to update OTP metadata in Supabase:", metaErr);
+    }
+
     await fetch("/api/auth/send-otp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, name: currentRegData.profileData.name, code: newCode }),
     });
-  }, [pendingRegData]);
+  }, [pendingRegData, currentUser]);
 
   const logout = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
