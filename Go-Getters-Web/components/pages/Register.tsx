@@ -8,7 +8,7 @@ import { UserRole } from "@/context/types";
 import { createClient } from "@/lib/supabase/client";
 
 export default function Register() {
-  const { register } = useAuth();
+  const { register, verifyAndCompleteRegister, resendOtp } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,6 +22,18 @@ export default function Register() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // OTP Verification States
+  const [showOtp, setShowOtp] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [regData, setRegData] = useState<{
+    name: string;
+    role: UserRole;
+    sponsorId?: string;
+    sponsorName?: string;
+    adminCode?: string;
+  } | null>(null);
+
   useEffect(() => {
     const fetchUsers = async () => {
       try {
@@ -33,6 +45,34 @@ export default function Register() {
       }
     };
     fetchUsers();
+  }, []);
+
+  // Cooldown timer for OTP Resend
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (resendCooldown > 0) {
+      interval = setInterval(() => {
+        setResendCooldown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [resendCooldown]);
+
+  // Restore pending registration on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('gogetters_pending_reg');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setRegData(parsed.profileData);
+          setEmail(parsed.email);
+          setShowOtp(true);
+        } catch (e) {
+          console.error("Failed to load saved pending registration:", e);
+        }
+      }
+    }
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -55,13 +95,128 @@ export default function Register() {
         finalSponsorId = undefined;
       }
 
-      await register(name, email, password, role, undefined, undefined, finalSponsorId, finalSponsorName, adminCode || undefined);
+      const user = await register(name, email, password, role, undefined, undefined, finalSponsorId, finalSponsorName, adminCode || undefined);
+      
+      if (user.status === 'unconfirmed') {
+        setRegData({
+          name,
+          role,
+          sponsorId: finalSponsorId,
+          sponsorName: finalSponsorName,
+          adminCode: adminCode || undefined,
+        });
+        setShowOtp(true);
+        setResendCooldown(30);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
       setLoading(false);
     }
   };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      if (!regData) throw new Error("Registration data not found. Please register again.");
+      await verifyAndCompleteRegister(email, otpCode.trim(), regData);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Verification failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      await resendOtp(email, 'signup');
+      setResendCooldown(30);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to resend code");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditDetails = () => {
+    setShowOtp(false);
+    setError("");
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('gogetters_pending_reg');
+    }
+  };
+
+  if (showOtp) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4 py-12">
+        <div className="w-full max-w-md space-y-8">
+          <div className="text-center">
+            <h1 className="text-4xl font-black text-primary tracking-tight mb-2">GO-GETTERS</h1>
+            <p className="text-muted-foreground">High-Performance Execution System</p>
+          </div>
+
+          <div className="bg-card p-8 rounded-xl border border-border shadow-xl space-y-6">
+            <div className="text-center space-y-2">
+              <h2 className="text-xl font-bold text-foreground">Confirm Your Email</h2>
+              <p className="text-sm text-muted-foreground">
+                Enter the 6-digit confirmation code we sent to{" "}
+                <span className="font-semibold text-primary">{email}</span>
+              </p>
+            </div>
+
+            <form onSubmit={handleVerify} className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium mb-2 text-center text-muted-foreground">Verification Code</label>
+                <Input
+                  type="text"
+                  placeholder="000000"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
+                  className="text-center tracking-[12px] text-2xl font-bold font-mono h-14 border border-border bg-muted/30 focus-visible:ring-primary focus-visible:border-primary"
+                  maxLength={6}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              {error && (
+                <p className="text-sm text-red-400 text-center">{error}</p>
+              )}
+
+              <Button type="submit" className="w-full font-bold h-12" disabled={loading || otpCode.length < 6}>
+                {loading ? "Verifying..." : "Verify & Complete Application"}
+              </Button>
+            </form>
+
+            <div className="flex justify-between items-center text-sm pt-2">
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={loading || resendCooldown > 0}
+                className={`font-semibold transition-colors ${
+                  resendCooldown > 0 ? "text-muted-foreground cursor-not-allowed" : "text-primary hover:underline"
+                }`}
+              >
+                {resendCooldown > 0 ? `Resend Code (${resendCooldown}s)` : "Resend Code"}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleEditDetails}
+                className="text-muted-foreground hover:text-foreground underline transition-colors"
+              >
+                Edit Details
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4 py-12">
@@ -189,3 +344,4 @@ export default function Register() {
     </div>
   );
 }
+

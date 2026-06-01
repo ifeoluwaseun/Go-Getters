@@ -20,6 +20,20 @@ interface AuthContextType {
     sponsorName?: string,
     adminCode?: string,
   ) => Promise<User>;
+  verifyAndCompleteRegister: (
+    email: string,
+    code: string,
+    profileData: {
+      name: string;
+      role: UserRole;
+      leaderId?: string;
+      leaderName?: string;
+      sponsorId?: string;
+      sponsorName?: string;
+      adminCode?: string;
+    },
+  ) => Promise<User>;
+  resendOtp: (email: string, type: 'signup') => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<User>) => Promise<void>;
   approveUser: (id: string) => Promise<void>;
@@ -29,6 +43,16 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
+
+function getApiUrl() {
+  if (process.env.EXPO_PUBLIC_DOMAIN) {
+    return `https://${process.env.EXPO_PUBLIC_DOMAIN}`;
+  }
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+  return 'http://localhost:3000';
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -212,14 +236,102 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name,
+          otp_code: otpCode,
+          otp_expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        }
+      }
+    });
     if (error) throw error;
     if (!data.user) throw new Error("Registration failed");
 
-    // Insert user into custom public.users table
-    const statusVal = (role === 'admin' || adminCode === 'GOGETTERS2024') ? 'approved' : 'pending';
-    const profileData = {
+    // Trigger the Next.js API endpoint to send the OTP email via Resend
+    try {
+      const apiUrl = getApiUrl();
+      await fetch(`${apiUrl}/api/auth/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, name, code: otpCode }),
+      });
+    } catch (err) {
+      console.error("Failed to send OTP email via Mobile during registration:", err);
+    }
+
+    // Return a dummy user with 'unconfirmed' status to trigger OTP screen on mobile UI
+    const userObj: User = {
       id: data.user.id,
+      name,
+      email,
+      role,
+      status: 'unconfirmed',
+      streak: 0,
+      points: 0,
+      completionRate: 0,
+      consistency: 0,
+      joinedAt: new Date().toISOString(),
+    };
+    return userObj;
+  }, [refreshLeaders]);
+
+  const verifyAndCompleteRegister = useCallback(async (
+    email: string,
+    code: string,
+    profileData: {
+      name: string;
+      role: UserRole;
+      leaderId?: string;
+      leaderName?: string;
+      sponsorId?: string;
+      sponsorName?: string;
+      adminCode?: string;
+    }
+  ): Promise<User> => {
+    // Check custom OTP against user metadata first
+    const { data: { user: authUser }, error: userErr } = await supabase.auth.getUser();
+    
+    if (userErr || !authUser) {
+      // Fallback: try to verify with Supabase native OTP if user isn't logged in
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token: code,
+        type: 'signup',
+      });
+      if (error) throw error;
+      if (!data.user) throw new Error("Verification failed");
+    } else {
+      const metadataCode = authUser.user_metadata?.otp_code;
+      const metadataExpires = authUser.user_metadata?.otp_expires_at;
+      
+      if (metadataCode) {
+        if (metadataCode !== code || new Date(metadataExpires) < new Date()) {
+          throw new Error("Invalid or expired verification code");
+        }
+      } else {
+        // Fallback to Supabase native OTP verification
+        const { error } = await supabase.auth.verifyOtp({
+          email,
+          token: code,
+          type: 'signup',
+        });
+        if (error) throw error;
+      }
+    }
+
+    const userId = authUser?.id || (await supabase.auth.getUser()).data.user?.id;
+    if (!userId) throw new Error("Verification failed - No authenticated session found");
+
+    // Insert user into custom public.users table now that we are authenticated!
+    const { name, role, leaderId, leaderName, sponsorId, sponsorName, adminCode } = profileData;
+    const statusVal = (role === 'admin' || adminCode === 'GOGETTERS2024') ? 'approved' : 'pending';
+    const dbProfile = {
+      id: userId,
       name,
       email,
       role,
@@ -235,7 +347,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sponsor_name: sponsorName || null,
     };
 
-    const { error: insertErr } = await supabase.from('users').insert(profileData);
+    const { error: insertErr } = await supabase.from('users').insert(dbProfile);
     if (insertErr) throw insertErr;
 
     // Notify organization owner/admins of the new registration
@@ -263,26 +375,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const userObj: User = {
-      id: profileData.id,
-      name: profileData.name,
-      email: profileData.email,
-      role: profileData.role as UserRole,
-      status: profileData.status as UserStatus,
+      id: dbProfile.id,
+      name: dbProfile.name,
+      email: dbProfile.email,
+      role: dbProfile.role as UserRole,
+      status: dbProfile.status as UserStatus,
       streak: 0,
       points: 0,
       completionRate: 0,
       consistency: 0,
-      joinedAt: profileData.joined_at,
-      leaderId: profileData.leader_id || undefined,
-      leaderName: profileData.leader_name || undefined,
-      sponsorId: profileData.sponsor_id || undefined,
-      sponsorName: profileData.sponsor_name || undefined,
+      joinedAt: dbProfile.joined_at,
+      leaderId: dbProfile.leader_id || undefined,
+      leaderName: dbProfile.leader_name || undefined,
+      sponsorId: dbProfile.sponsor_id || undefined,
+      sponsorName: dbProfile.sponsor_name || undefined,
     };
 
     setCurrentUser(userObj);
     await refreshLeaders();
     return userObj;
   }, [refreshLeaders]);
+
+  const resendOtp = useCallback(async (email: string, type: 'signup'): Promise<void> => {
+    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Update user metadata in Supabase Auth with new code
+    const { error: updateErr } = await supabase.auth.updateUser({
+      data: {
+        otp_code: newCode,
+        otp_expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      }
+    });
+
+    if (updateErr) {
+      // Fallback to native Supabase resend
+      const { error } = await supabase.auth.resend({
+        email,
+        type,
+      });
+      if (error) throw error;
+      return;
+    }
+
+    // Trigger Next.js send-otp endpoint
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const userName = user?.user_metadata?.name || 'User';
+      const apiUrl = getApiUrl();
+      await fetch(`${apiUrl}/api/auth/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, name: userName, code: newCode }),
+      });
+    } catch (err) {
+      console.error("Failed to send OTP email via Mobile resend:", err);
+    }
+  }, [supabase]);
 
   const logout = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
@@ -385,7 +533,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       currentUser, isLoading, allUsers, leaders, pendingUsers,
-      login, register, logout, updateUser, approveUser, rejectUser, refreshUsers, adminUpdateUser,
+      login, register, verifyAndCompleteRegister, resendOtp, logout, updateUser, approveUser, rejectUser, refreshUsers, adminUpdateUser,
     }}>
       {children}
     </AuthContext.Provider>

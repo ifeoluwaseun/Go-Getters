@@ -2,7 +2,7 @@
 
 import { type ReactNode, createContext, useContext, useState, useEffect, useCallback } from "react";
 import { type UserRole, type UserStatus, type User } from "@/types";
-import { createClient } from "@/lib/supabase/client";
+import { supabase } from "@/lib/supabase";
 
 export interface AuthContextType {
   currentUser: User | null;
@@ -79,7 +79,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const supabase = createClient();
   const pendingUsers = allUsers.filter(u => u.status === 'pending');
 
   const refreshUsers = useCallback(async () => {
@@ -87,7 +86,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase.from('users').select('*');
       if (error) throw error;
       
-      // Map columns correctly: leader_id -> leaderId, joined_at -> joinedAt, etc.
       const mapped = (data || []).map(u => ({
         id: u.id,
         name: u.name,
@@ -110,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error("Error refreshing users:", err);
     }
-  }, [supabase]);
+  }, []);
 
   const refreshLeaders = useCallback(async () => {
     try {
@@ -123,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error("Error refreshing leaders:", err);
     }
-  }, [supabase]);
+  }, []);
 
   // Handle Auth Session State Change
   useEffect(() => {
@@ -187,7 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       subscription.unsubscribe();
     };
-  }, [supabase, refreshUsers, refreshLeaders]);
+  }, [refreshUsers, refreshLeaders]);
 
   const login = useCallback(async (email: string, password: string): Promise<User> => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -224,7 +222,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (userObj.role === 'admin') await refreshUsers();
     await refreshLeaders();
     return userObj;
-  }, [supabase, refreshUsers, refreshLeaders]);
+  }, [refreshUsers, refreshLeaders]);
 
   const register = useCallback(async (
     name: string,
@@ -287,10 +285,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ email, name, code: otpCode }),
       });
     } catch (err) {
-      console.error("Failed to send OTP email via Resend:", err);
+      console.error("Failed to send OTP email via Resend/SMTP:", err);
     }
 
-    // Return dummy user with status 'unconfirmed'
     const userObj: User = {
       id: data.user.id,
       name,
@@ -305,7 +302,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     
     return userObj;
-  }, [supabase]);
+  }, []);
 
   const verifyAndCompleteRegister = useCallback(async (
     email: string,
@@ -401,7 +398,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (userObj.role === 'admin') await refreshUsers();
     await refreshLeaders();
     return userObj;
-  }, [supabase, pendingRegData, refreshUsers, refreshLeaders]);
+  }, [pendingRegData, refreshUsers, refreshLeaders]);
 
   const resendOtp = useCallback(async (email: string, type: 'signup'): Promise<void> => {
     if (!pendingRegData || pendingRegData.email !== email) {
@@ -427,12 +424,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) console.error("Signout error:", error);
     setCurrentUser(null);
     setAllUsers([]);
-  }, [supabase]);
+  }, []);
 
   const updateUser = useCallback(async (updates: Partial<User>) => {
     if (!currentUser) return;
     
-    // Map object camelCase keys to snake_case for DB columns
     const dbUpdates: Record<string, any> = {};
     if (updates.name !== undefined) dbUpdates.name = updates.name;
     if (updates.email !== undefined) dbUpdates.email = updates.email;
@@ -459,7 +455,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const updatedUser = { ...currentUser, ...updates };
     setCurrentUser(updatedUser);
     setAllUsers(prev => prev.map(u => u.id === currentUser.id ? updatedUser : u));
-  }, [currentUser, supabase]);
+  }, [currentUser]);
 
   const approveUser = useCallback(async (id: string) => {
     const { error } = await supabase
@@ -473,7 +469,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (currentUser?.id === id) {
       setCurrentUser(prev => prev ? { ...prev, status: 'approved' } : null);
     }
-  }, [currentUser, supabase]);
+  }, [currentUser]);
 
   const rejectUser = useCallback(async (id: string, reason: string) => {
     const { error } = await supabase
@@ -487,7 +483,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (currentUser?.id === id) {
       setCurrentUser(prev => prev ? { ...prev, status: 'rejected', rejectionReason: reason } : null);
     }
-  }, [currentUser, supabase]);
+  }, [currentUser]);
 
   const adminUpdateUser = useCallback(async (userId: string, updates: Partial<User>) => {
     const dbUpdates: Record<string, any> = {};
@@ -518,7 +514,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (currentUser?.id === userId) {
       setCurrentUser(prev => prev ? { ...prev, ...partialUpdate } : null);
     }
-  }, [currentUser, supabase]);
+  }, [currentUser]);
 
   return (
     <AuthContext.Provider value={{

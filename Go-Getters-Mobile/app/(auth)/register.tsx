@@ -99,7 +99,7 @@ import { useEffect } from "react";
 export default function RegisterScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { register } = useAuth();
+  const { register, verifyAndCompleteRegister, resendOtp } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -111,6 +111,21 @@ export default function RegisterScreen() {
   const [adminCode, setAdminCode] = useState("");
   const [showAdminCode, setShowAdminCode] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // OTP Verification States
+  const [showOtpStep, setShowOtpStep] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [regData, setRegData] = useState<{
+    name: string;
+    email: string;
+    role: UserRole;
+    leaderId?: string;
+    leaderName?: string;
+    sponsorId?: string;
+    sponsorName?: string;
+    adminCode?: string;
+  } | null>(null);
 
   const topPad = Platform.OS === "web" ? 20 : insets.top;
   const botPad = Platform.OS === "web" ? 34 : insets.bottom;
@@ -126,6 +141,16 @@ export default function RegisterScreen() {
     };
     fetchUsers();
   }, []);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (resendCooldown > 0) {
+      interval = setInterval(() => {
+        setResendCooldown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [resendCooldown]);
 
   async function handleRegister() {
     if (!name.trim()) { Alert.alert("Name required"); return; }
@@ -149,9 +174,21 @@ export default function RegisterScreen() {
         finalSponsorId = undefined;
       }
 
+      const regInfo = {
+        name,
+        email: email.trim().toLowerCase(),
+        role,
+        leaderId: undefined,
+        leaderName: undefined,
+        sponsorId: finalSponsorId,
+        sponsorName: finalSponsorName,
+        adminCode: adminCode || undefined,
+      };
+      setRegData(regInfo);
+
       const user = await register(
         name,
-        email,
+        email.trim().toLowerCase(),
         password,
         role,
         undefined,
@@ -161,16 +198,134 @@ export default function RegisterScreen() {
         adminCode || undefined,
       );
 
+      if (user.status === 'unconfirmed') {
+        setShowOtpStep(true);
+        setResendCooldown(30);
+      } else if (user.status === 'approved') {
+        router.replace("/(tabs)");
+      } else {
+        router.replace("/pending-approval");
+      }
+    } catch (err: any) {
+      const errMsg = err?.message || "Registration failed. Please try again.";
+      Alert.alert("Registration Error", errMsg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleVerify() {
+    if (!otpCode.trim() || otpCode.length < 6) {
+      Alert.alert("Invalid Code", "Please enter a valid 6-digit confirmation code.");
+      return;
+    }
+    if (!regData) {
+      Alert.alert("Error", "Registration data not found. Please register again.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const user = await verifyAndCompleteRegister(regData.email, otpCode.trim(), regData);
+      
       if (user.status === 'approved') {
         router.replace("/(tabs)");
       } else {
         router.replace("/pending-approval");
       }
-    } catch (err) {
-      Alert.alert("Registration failed. Please try again.");
+    } catch (err: any) {
+      const errMsg = err?.message || "Verification failed. Please try again.";
+      Alert.alert("Verification Error", errMsg);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleResendOtp() {
+    if (!regData?.email) return;
+    setLoading(true);
+    try {
+      await resendOtp(regData.email, 'signup');
+      setResendCooldown(30);
+      Alert.alert("Code Resent", "A new confirmation code has been sent to your email.");
+    } catch (err: any) {
+      Alert.alert("Error", err?.message || "Failed to resend confirmation code.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (showOtpStep) {
+    return (
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView
+          style={{ flex: 1, backgroundColor: colors.background }}
+          contentContainerStyle={[styles.container, { paddingTop: topPad + 20, paddingBottom: botPad + 20 }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <TouchableOpacity onPress={() => setShowOtpStep(false)} style={styles.back} activeOpacity={0.7}>
+            <Ionicons name="arrow-back" size={22} color={colors.foreground} />
+          </TouchableOpacity>
+
+          <Text style={[styles.title, { color: colors.foreground }]}>Confirm Your Email</Text>
+          <Text style={[styles.sub, { color: colors.mutedForeground, marginBottom: 32 }]}>
+            Enter the 6-digit confirmation code we sent to{" "}
+            <Text style={{ fontFamily: "Inter_600SemiBold", color: colors.primary }}>{regData?.email}</Text>
+          </Text>
+
+          <View style={{ marginBottom: 32 }}>
+            <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Verification Code</Text>
+            <View style={[styles.inputWrap, { backgroundColor: colors.muted, borderColor: colors.primary }]}>
+              <Ionicons name="shield-checkmark-outline" size={18} color={colors.primary} />
+              <TextInput
+                style={[styles.input, { color: colors.foreground, letterSpacing: 6, fontSize: 18, fontFamily: "Inter_700Bold" }]}
+                placeholder="000000"
+                placeholderTextColor={colors.mutedForeground}
+                value={otpCode}
+                onChangeText={(text) => setOtpCode(text.replace(/[^0-9]/g, "").slice(0, 6))}
+                keyboardType="number-pad"
+                autoFocus
+                maxLength={6}
+              />
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.btn, { backgroundColor: colors.primary, opacity: loading || otpCode.length < 6 ? 0.7 : 1 }]}
+            onPress={handleVerify}
+            disabled={loading || otpCode.length < 6}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.btnText, { color: colors.primaryForeground }]}>
+              {loading ? "Verifying..." : "Verify & Complete Application"}
+            </Text>
+          </TouchableOpacity>
+
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
+            <TouchableOpacity 
+              onPress={handleResendOtp} 
+              disabled={loading || resendCooldown > 0} 
+              activeOpacity={0.7}
+            >
+              <Text style={{ 
+                color: resendCooldown > 0 ? colors.mutedForeground : colors.primary, 
+                fontFamily: "Inter_600SemiBold",
+                fontSize: 13 
+              }}>
+                {resendCooldown > 0 ? `Resend Code (${resendCooldown}s)` : "Resend Code"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => setShowOtpStep(false)} activeOpacity={0.7}>
+              <Text style={{ color: colors.mutedForeground, fontSize: 13, textDecorationLine: "underline" }}>
+                Edit Details
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
   }
 
   return (
