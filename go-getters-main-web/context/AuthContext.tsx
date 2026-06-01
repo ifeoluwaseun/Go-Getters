@@ -256,7 +256,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name,
+          otp_code: otpCode,
+          otp_expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        }
+      }
+    });
     if (error) throw error;
     if (!data.user) throw new Error("Registration failed");
 
@@ -317,18 +327,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       adminCode?: string;
     }
   ): Promise<User> => {
-    if (!pendingRegData || pendingRegData.otpCode !== code || pendingRegData.email !== email) {
-      throw new Error("Invalid or expired verification code");
+    // 1. Load latest state from localStorage to prevent stale checks
+    let currentRegState = pendingRegData;
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('gogetters_pending_reg');
+      if (saved) {
+        try {
+          currentRegState = JSON.parse(saved);
+        } catch (e) {
+          console.error(e);
+        }
+      }
     }
 
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (!authUser) throw new Error("No authenticated session found. Please register again.");
+    if (!currentRegState || currentRegState.email !== email) {
+      throw new Error("No pending registration found for this email address");
+    }
+
+    // 2. Fetch authenticated session
+    const { data: { user: authUser }, error: userErr } = await supabase.auth.getUser();
+    
+    if (userErr || !authUser) {
+      // Fallback: try to verify with Supabase native OTP if user isn't logged in
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token: code,
+        type: 'signup',
+      });
+      if (error) throw error;
+      if (!data.user) throw new Error("Verification failed");
+    } else {
+      // Check custom metadata OTP
+      const metadataCode = authUser.user_metadata?.otp_code || currentRegState.otpCode;
+      const metadataExpires = authUser.user_metadata?.otp_expires_at;
+      
+      if (metadataCode !== code) {
+        throw new Error("Invalid or expired verification code");
+      }
+      
+      if (metadataExpires && new Date(metadataExpires) < new Date()) {
+        throw new Error("Verification code has expired");
+      }
+    }
+
+    const userId = authUser?.id || (await supabase.auth.getUser()).data.user?.id;
+    if (!userId) throw new Error("Verification failed - No authenticated session found");
 
     const { name, role, leaderId, leaderName, sponsorId, sponsorName, adminCode } = profileData;
     const statusVal = (role === 'admin' || adminCode === 'GOGETTERS2024') ? 'approved' : 'pending';
     
     const dbProfile = {
-      id: authUser.id,
+      id: userId,
       name,
       email,
       role,
@@ -401,12 +450,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [pendingRegData, refreshUsers, refreshLeaders]);
 
   const resendOtp = useCallback(async (email: string, type: 'signup'): Promise<void> => {
-    if (!pendingRegData || pendingRegData.email !== email) {
+    let currentRegData = pendingRegData;
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('gogetters_pending_reg');
+      if (saved) {
+        try {
+          currentRegData = JSON.parse(saved);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+
+    if (!currentRegData || currentRegData.email !== email) {
       throw new Error("No pending registration found for this email address");
     }
 
     const newCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const updatedState = { ...pendingRegData, otpCode: newCode };
+    const updatedState = { ...currentRegData, otpCode: newCode };
     setPendingRegData(updatedState);
     if (typeof window !== 'undefined') {
       localStorage.setItem('gogetters_pending_reg', JSON.stringify(updatedState));
@@ -415,7 +476,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await fetch("/api/auth/send-otp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, name: pendingRegData.profileData.name, code: newCode }),
+      body: JSON.stringify({ email, name: currentRegData.profileData.name, code: newCode }),
     });
   }, [pendingRegData]);
 
