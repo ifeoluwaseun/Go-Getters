@@ -127,12 +127,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const fetchUser = async (userId: string) => {
       try {
-        const { data, error } = await supabase
+        const { data: records, error } = await supabase
           .from('users')
           .select('*')
-          .eq('id', userId)
-          .single();
+          .eq('id', userId);
         if (error) throw error;
+        
+        const data = records && records.length > 0 ? records[0] : null;
         
         if (data) {
           const userObj: User = {
@@ -155,6 +156,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           };
           setCurrentUser(userObj);
           if (userObj.role === 'admin') await refreshUsers();
+        } else {
+          // No profile row in public.users table yet! This is a pending/unconfirmed user.
+          // Let's get their email and name from auth session metadata if possible!
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            const userObj: User = {
+              id: session.user.id,
+              name: session.user.user_metadata?.name || 'New User',
+              email: session.user.email || '',
+              role: 'member',
+              status: 'unconfirmed',
+              streak: 0,
+              points: 0,
+              completionRate: 0,
+              consistency: 0,
+              joinedAt: new Date().toISOString(),
+            };
+            setCurrentUser(userObj);
+          }
         }
       } catch (err) {
         console.error("Error loading user profile:", err);
@@ -192,12 +212,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
     if (!data.user) throw new Error("No user returned");
 
-    const { data: profile, error: profileErr } = await supabase
+    const { data: records, error: profileErr } = await supabase
       .from('users')
       .select('*')
-      .eq('id', data.user.id)
-      .single();
+      .eq('id', data.user.id);
     if (profileErr) throw profileErr;
+
+    const profile = records && records.length > 0 ? records[0] : null;
+
+    if (!profile) {
+      // User is authenticated in Supabase Auth but has no profile row in users table.
+      // They probably never completed OTP registration verification!
+      const userObj: User = {
+        id: data.user.id,
+        name: data.user.user_metadata?.name || 'New User',
+        email: data.user.email || '',
+        role: 'member',
+        status: 'unconfirmed',
+        streak: 0,
+        points: 0,
+        completionRate: 0,
+        consistency: 0,
+        joinedAt: new Date().toISOString(),
+      };
+      setCurrentUser(userObj);
+      await refreshLeaders();
+      return userObj;
+    }
 
     const userObj: User = {
       id: profile.id,
