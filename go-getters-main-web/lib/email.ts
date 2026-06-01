@@ -3,14 +3,6 @@ import nodemailer from "nodemailer";
 const smtpUser = process.env.SMTP_USER || "akintayojoseph64@gmail.com";
 const smtpPass = process.env.SMTP_PASS || "rzyalejjvxupxczx";
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: smtpUser,
-    pass: smtpPass,
-  },
-});
-
 export async function sendEmail({
   to,
   subject,
@@ -24,6 +16,19 @@ export async function sendEmail({
     console.warn("SMTP_USER or SMTP_PASS is not configured. Email skipped:", { to, subject });
     return null;
   }
+
+  // Create transporter on-demand to guarantee no leaked sockets in serverless environments
+  const transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    pool: false, // Disable pooling to prevent sockets keeping the serverless event loop active
+    auth: {
+      user: smtpUser,
+      pass: smtpPass,
+    },
+  } as any);
+
   try {
     const data = await transporter.sendMail({
       from: `"Go-Getters" <${smtpUser}>`,
@@ -35,6 +40,8 @@ export async function sendEmail({
   } catch (error) {
     console.error("Failed to send email via SMTP:", error);
     throw error;
+  } finally {
+    transporter.close(); // Clean up socket immediately!
   }
 }
 
