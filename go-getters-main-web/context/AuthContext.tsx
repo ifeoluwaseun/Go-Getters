@@ -235,6 +235,79 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         consistency: 0,
         joinedAt: new Date().toISOString(),
       };
+
+      // Generate a new OTP code
+      const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+      // Read existing registration details if present in localStorage to preserve role/sponsor
+      let nameVal = data.user.user_metadata?.name || 'New User';
+      let roleVal: UserRole = 'member';
+      let sponsorIdVal: string | undefined = undefined;
+      let sponsorNameVal: string | undefined = undefined;
+
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('gogetters_pending_reg');
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.email === email && parsed.profileData) {
+              nameVal = parsed.profileData.name || nameVal;
+              roleVal = parsed.profileData.role || roleVal;
+              sponsorIdVal = parsed.profileData.sponsorId;
+              sponsorNameVal = parsed.profileData.sponsorName;
+            }
+          } catch (e) {
+            console.error("Failed to parse existing registration from localStorage:", e);
+          }
+        }
+      }
+
+      // Update custom metadata on the authenticated user record in Supabase Auth!
+      try {
+        await supabase.auth.updateUser({
+          data: {
+            otp_code: newCode,
+            otp_expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          }
+        });
+      } catch (metaErr) {
+        console.error("Failed to update OTP metadata in Supabase:", metaErr);
+      }
+
+      const regState = {
+        email,
+        otpCode: newCode,
+        profileData: {
+          name: nameVal,
+          role: roleVal,
+          sponsorId: sponsorIdVal,
+          sponsorName: sponsorNameVal,
+        }
+      };
+
+      setPendingRegData(regState);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gogetters_pending_reg', JSON.stringify(regState));
+      }
+
+      // Send the branded OTP email via Next.js API
+      try {
+        const res = await fetch("/api/auth/send-otp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            name: nameVal,
+            code: newCode
+          }),
+        });
+        if (!res.ok) {
+          console.error("Failed to deliver confirmation email code.");
+        }
+      } catch (sendErr) {
+        console.error("Failed to send OTP email:", sendErr);
+      }
+
       setCurrentUser(userObj);
       await refreshLeaders();
       return userObj;

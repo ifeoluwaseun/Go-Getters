@@ -2,6 +2,8 @@ import nodemailer from "nodemailer";
 
 const smtpUser = process.env.SMTP_USER || "akintayojoseph64@gmail.com";
 const smtpPass = process.env.SMTP_PASS || "rzyalejjvxupxczx";
+const resendApiKey = process.env.RESEND_API_KEY;
+const fromEmail = process.env.FROM_EMAIL || "Go-Getters <onboarding@resend.dev>";
 
 export async function sendEmail({
   to,
@@ -12,8 +14,50 @@ export async function sendEmail({
   subject: string;
   html: string;
 }) {
+  // Determine if we can use Resend.
+  // We use Resend if RESEND_API_KEY is configured AND either:
+  // - FROM_EMAIL is not the default onboarding@resend.dev sandbox address (implying a custom domain).
+  // - The recipient is the sandbox owner (akintayojoseph64@gmail.com).
+  const canUseResend =
+    !!resendApiKey &&
+    (fromEmail !== "Go-Getters <onboarding@resend.dev>" &&
+     fromEmail !== "onboarding@resend.dev" ||
+     to === "akintayojoseph64@gmail.com");
+
+  if (canUseResend) {
+    console.log(`[Email System] Routing email to ${to} via Resend API`);
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: fromEmail,
+          to,
+          subject,
+          html,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || `Resend API returned status ${res.status}`);
+      }
+
+      const data = await res.json();
+      return data;
+    } catch (error) {
+      console.error("[Email System] Failed to send email via Resend:", error);
+      console.log("[Email System] Falling back to SMTP...");
+    }
+  }
+
+  // Fallback / Default Mode: Gmail SMTP via nodemailer
+  console.log(`[Email System] Routing email to ${to} via Gmail SMTP`);
   if (!smtpUser || !smtpPass) {
-    console.warn("SMTP_USER or SMTP_PASS is not configured. Email skipped:", { to, subject });
+    console.warn("[Email System] SMTP_USER or SMTP_PASS is not configured. Email skipped:", { to, subject });
     return null;
   }
 
@@ -38,7 +82,7 @@ export async function sendEmail({
     });
     return data;
   } catch (error) {
-    console.error("Failed to send email via SMTP:", error);
+    console.error("[Email System] Failed to send email via SMTP:", error);
     throw error;
   } finally {
     transporter.close(); // Clean up socket immediately!

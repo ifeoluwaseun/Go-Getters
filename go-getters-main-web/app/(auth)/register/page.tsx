@@ -61,15 +61,36 @@ export default function Register() {
 
   // Restore pending registration on mount or if unconfirmed session exists
   useEffect(() => {
+    let loadedFromLocal = false;
+
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('gogetters_pending_reg');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.email) {
+            setEmail(parsed.email);
+            setRegData(parsed.profileData);
+            setShowOtp(true);
+            loadedFromLocal = true;
+          }
+        } catch (e) {
+          console.error("Failed to load saved pending registration:", e);
+        }
+      }
+    }
+
     if (currentUser && currentUser.status === "unconfirmed") {
-      setEmail(currentUser.email);
-      setRegData({
-        name: currentUser.name || "New User",
-        role: currentUser.role || "member",
-        sponsorId: currentUser.sponsorId,
-        sponsorName: currentUser.sponsorName,
-      });
-      setShowOtp(true);
+      if (!loadedFromLocal) {
+        setEmail(currentUser.email);
+        setRegData({
+          name: currentUser.name || "New User",
+          role: currentUser.role || "member",
+          sponsorId: currentUser.sponsorId,
+          sponsorName: currentUser.sponsorName,
+        });
+        setShowOtp(true);
+      }
 
       // Automatically send a fresh code if there isn't one already in localStorage
       if (typeof window !== 'undefined') {
@@ -78,21 +99,6 @@ export default function Register() {
           resendOtp(currentUser.email, 'signup').catch(err => {
             console.error("Auto-resend of verification code failed:", err);
           });
-        }
-      }
-      return;
-    }
-
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('gogetters_pending_reg');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          setRegData(parsed.profileData);
-          setEmail(parsed.email);
-          setShowOtp(true);
-        } catch (e) {
-          console.error("Failed to load saved pending registration:", e);
         }
       }
     }
