@@ -25,14 +25,26 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
-                const removeAttrs = (node) => {
+                const cleanNode = (node) => {
                   if (node.nodeType === 1) {
                     if (node.hasAttribute('bis_skin_checked')) node.removeAttribute('bis_skin_checked');
                     if (node.hasAttribute('bis_register')) node.removeAttribute('bis_register');
-                    const elements = node.querySelectorAll('[bis_skin_checked], [bis_register]');
+                    
+                    for (let i = node.attributes.length - 1; i >= 0; i--) {
+                      const name = node.attributes[i].name;
+                      if (name.startsWith('__processed_')) {
+                        node.removeAttribute(name);
+                      }
+                    }
+                  }
+                };
+
+                const removeAttrs = (node) => {
+                  if (node.nodeType === 1) {
+                    cleanNode(node);
+                    const elements = node.querySelectorAll('*');
                     for (let i = 0; i < elements.length; i++) {
-                      elements[i].removeAttribute('bis_skin_checked');
-                      elements[i].removeAttribute('bis_register');
+                      cleanNode(elements[i]);
                     }
                   }
                 };
@@ -46,10 +58,7 @@ export default function RootLayout({
                       }
                     } else if (mutation.type === 'attributes') {
                       const target = mutation.target;
-                      if (target.nodeType === 1) {
-                        if (target.hasAttribute('bis_skin_checked')) target.removeAttribute('bis_skin_checked');
-                        if (target.hasAttribute('bis_register')) target.removeAttribute('bis_register');
-                      }
+                      cleanNode(target);
                     }
                   }
                 });
@@ -57,8 +66,7 @@ export default function RootLayout({
                 observer.observe(document.documentElement, {
                   childList: true,
                   subtree: true,
-                  attributes: true,
-                  attributeFilter: ['bis_skin_checked', 'bis_register']
+                  attributes: true
                 });
               })();
             `
