@@ -401,15 +401,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('gogetters_pending_reg', JSON.stringify(regState));
     }
 
-    // Send the branded OTP email via Next.js API
-    const res = await fetch("/api/auth/send-otp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, name, code: otpCode }),
-    });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || "Failed to deliver confirmation email code.");
+    // Send the branded OTP email via Next.js API (non-blocking for registration flow)
+    try {
+      const res = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, name, code: otpCode }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        console.error("[AuthContext] Failed to send initial signup OTP:", errData.error || res.statusText);
+      }
+    } catch (sendErr) {
+      console.error("[AuthContext] Error sending initial signup OTP:", sendErr);
     }
 
     const userObj: User = {

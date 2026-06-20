@@ -67,6 +67,9 @@ export async function sendEmail({
     port: 465,
     secure: true,
     pool: false, // Disable pooling to prevent sockets keeping the serverless event loop active
+    connectionTimeout: 10000, // 10 seconds connection timeout
+    greetingTimeout: 10000,   // 10 seconds greeting timeout
+    socketTimeout: 15000,     // 15 seconds socket timeout
     auth: {
       user: smtpUser,
       pass: smtpPass,
