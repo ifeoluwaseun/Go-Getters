@@ -241,7 +241,7 @@ export default function Register() {
                 onClick={handleResend}
                 disabled={loading || resendCooldown > 0}
                 className={`font-semibold transition-colors ${
-                  resendCooldown > 0 ? "text-muted-foreground cursor-not-allowed" : "text-primary hover:underline"
+                  resendCooldown > 0 ? "text-muted-foreground cursor-not-allowed" : "text-primary hover:underline cursor-pointer"
                 }`}
               >
                 {resendCooldown > 0 ? `Resend Code (${resendCooldown}s)` : "Resend Code"}
@@ -250,7 +250,7 @@ export default function Register() {
               <button
                 type="button"
                 onClick={handleEditDetails}
-                className="text-muted-foreground hover:text-foreground underline transition-colors"
+                className="text-muted-foreground hover:text-foreground underline transition-colors cursor-pointer"
               >
                 Edit Details
               </button>
