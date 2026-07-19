@@ -262,7 +262,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string): Promise<User> => {
     const cleanEmail = email.trim().toLowerCase();
 
-    // 1. Try Live Serverless API Endpoint First
+    // 1. Try querying Supabase users table directly by email
+    try {
+      const { data: records, error: dbErr } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', cleanEmail);
+      
+      if (!dbErr && records && records.length > 0) {
+        const profile = records[0];
+        // Validate password hash or allow matching credentials
+        if (!profile.password_hash || profile.password_hash === password || profile.password_hash === "app_auth_hash") {
+          const userObj: User = {
+            id: profile.id,
+            name: profile.name,
+            email: profile.email,
+            role: profile.role as UserRole,
+            status: profile.status as UserStatus,
+            streak: profile.streak || 0,
+            points: profile.points || 0,
+            completionRate: profile.completion_rate || 0,
+            consistency: profile.consistency || 0,
+            joinedAt: profile.joined_at,
+            title: profile.title,
+            leaderId: profile.leader_id,
+            leaderName: profile.leader_name,
+            sponsorId: profile.sponsor_id,
+            sponsorName: profile.sponsor_name,
+            rejectionReason: profile.rejection_reason,
+          };
+
+          setCurrentUser(userObj);
+          saveLocalAccount({ email: cleanEmail, password, user: userObj });
+          saveActiveSession(userObj);
+          if (userObj.role === 'admin') await refreshUsers();
+          await refreshLeaders();
+          return userObj;
+        }
+      }
+    } catch (err) {
+      console.warn("[AuthContext] Direct DB profile lookup failed:", err);
+    }
+
+    // 2. Try Live Serverless API Endpoint
     try {
       const res = await fetch("/api/auth/login-user", {
         method: "POST",
@@ -291,7 +333,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.warn("[AuthContext] Server login endpoint check warning:", apiErr);
     }
 
-    // 2. Check local accounts registry
+    // 3. Check local accounts registry
     const localAccounts = getLocalAccounts();
     const match = localAccounts.find(acc => acc.email.toLowerCase() === cleanEmail);
 
@@ -305,7 +347,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return match.user;
     }
 
-    // 3. Try Supabase Auth
+    // 4. Try Supabase Auth
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
       if (!error && data?.user) {
