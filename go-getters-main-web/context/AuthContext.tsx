@@ -122,37 +122,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshUsers = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from('users').select('*');
-      if (error) throw error;
-      
-      const mapped = (data || []).map(u => ({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        role: u.role as UserRole,
-        status: u.status as UserStatus,
-        streak: u.streak,
-        points: u.points,
-        completionRate: u.completion_rate,
-        consistency: u.consistency,
-        joinedAt: u.joined_at,
-        title: u.title,
-        leaderId: u.leader_id,
-        leaderName: u.leader_name,
-        sponsorId: u.sponsor_id,
-        sponsorName: u.sponsor_name,
-        rejectionReason: u.rejection_reason,
-      }));
+      let serverUsers: User[] = [];
+      try {
+        const res = await fetch("/api/auth/users");
+        if (res.ok) {
+          const resData = await res.json();
+          if (resData.success && resData.users) {
+            serverUsers = resData.users;
+          }
+        }
+      } catch (apiErr) {
+        console.warn("[AuthContext] Failed to fetch users from API:", apiErr);
+      }
 
-      // Merge local accounts into allUsers list
+      let dbUsers: User[] = [];
+      try {
+        const { data, error } = await supabase.from('users').select('*');
+        if (!error && data) {
+          dbUsers = data.map(u => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            role: u.role as UserRole,
+            status: u.status as UserStatus,
+            streak: u.streak,
+            points: u.points,
+            completionRate: u.completion_rate,
+            consistency: u.consistency,
+            joinedAt: u.joined_at,
+            title: u.title,
+            leaderId: u.leader_id,
+            leaderName: u.leader_name,
+            sponsorId: u.sponsor_id,
+            sponsorName: u.sponsor_name,
+            rejectionReason: u.rejection_reason,
+          }));
+        }
+      } catch (err) {
+        console.warn("Error refreshing users from DB:", err);
+      }
+
       const localAccs = getLocalAccounts().map(a => a.user);
       const combinedMap = new Map<string, User>();
-      mapped.forEach(u => combinedMap.set(u.id, u));
+      serverUsers.forEach(u => combinedMap.set(u.id, u));
+      dbUsers.forEach(u => combinedMap.set(u.id, u));
       localAccs.forEach(u => combinedMap.set(u.id, u));
 
       setAllUsers(Array.from(combinedMap.values()));
     } catch (err) {
-      console.error("Error refreshing users from DB, loading local accounts:", err);
+      console.error("Error in refreshUsers:", err);
       const localAccs = getLocalAccounts().map(a => a.user);
       if (localAccs.length > 0) setAllUsers(localAccs);
     }
@@ -244,7 +262,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string): Promise<User> => {
     const cleanEmail = email.trim().toLowerCase();
 
-    // 1. Check local accounts registry FIRST
+    // 1. Try Live Serverless API Endpoint First
+    try {
+      const res = await fetch("/api/auth/login-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail, password }),
+      });
+      if (res.ok) {
+        const resData = await res.json();
+        if (resData.success && resData.user) {
+          const userObj: User = resData.user;
+          setCurrentUser(userObj);
+          saveLocalAccount({ email: cleanEmail, password, user: userObj });
+          saveActiveSession(userObj);
+          if (userObj.role === 'admin') await refreshUsers();
+          await refreshLeaders();
+          return userObj;
+        }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        if (errData.error === "Invalid password.") {
+          throw new Error("Invalid password");
+        }
+      }
+    } catch (apiErr: any) {
+      if (apiErr?.message === "Invalid password") throw apiErr;
+      console.warn("[AuthContext] Server login endpoint check warning:", apiErr);
+    }
+
+    // 2. Check local accounts registry
     const localAccounts = getLocalAccounts();
     const match = localAccounts.find(acc => acc.email.toLowerCase() === cleanEmail);
 
@@ -258,7 +305,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return match.user;
     }
 
-    // 2. Try Supabase Auth
+    // 3. Try Supabase Auth
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
       if (!error && data?.user) {
@@ -312,16 +359,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   ): Promise<User> => {
     const cleanEmail = email.trim().toLowerCase();
 
-    // Check if account already exists locally
-    const existing = getLocalAccounts().find(a => a.email.toLowerCase() === cleanEmail);
-    if (existing) {
-      throw new Error("An account with this email address already exists. Please sign in instead.");
-    }
-
     if (role === 'admin') {
       if (adminCode !== 'GOGETTERS2024') {
         throw new Error("Invalid admin setup code");
       }
+    }
+
+    // 1. Try Live Serverless API Registration
+    try {
+      const res = await fetch("/api/auth/register-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          email: cleanEmail,
+          password,
+          role,
+          leaderId,
+          leaderName,
+          sponsorId,
+          sponsorName,
+          adminCode,
+        }),
+      });
+      if (res.ok) {
+        const resData = await res.json();
+        if (resData.success && resData.user) {
+          const profileData = {
+            name,
+            email: cleanEmail,
+            password,
+            role,
+            leaderId: leaderId || undefined,
+            leaderName: leaderName || undefined,
+            sponsorId: sponsorId || undefined,
+            sponsorName: sponsorName || undefined,
+            adminCode: adminCode || undefined,
+          };
+          const regState = { email: cleanEmail, otpCode: resData.otpCode, profileData };
+          setPendingRegData(regState);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('gogetters_pending_reg', JSON.stringify(regState));
+          }
+          return resData.user;
+        }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        if (errData.error) throw new Error(errData.error);
+      }
+    } catch (apiErr: any) {
+      if (apiErr?.message?.includes("already exists")) throw apiErr;
+      console.warn("[AuthContext] Live register endpoint warning, proceeding with fallback:", apiErr);
     }
 
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
@@ -345,10 +433,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         authUserId = data.user.id;
       }
     } catch (err: any) {
-      console.warn("[AuthContext] Supabase auth network error (proceeding with local registration flow):", err?.message || err);
+      console.warn("[AuthContext] Supabase auth network error:", err?.message || err);
     }
 
-    // Save registration info in state/localStorage for verification step
     const profileData = {
       name,
       email: cleanEmail,
@@ -367,17 +454,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('gogetters_pending_reg', JSON.stringify(regState));
     }
 
-    // Send the branded OTP email via Next.js API (non-blocking for registration flow)
     try {
-      const res = await fetch("/api/auth/send-otp", {
+      await fetch("/api/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: cleanEmail, name, code: otpCode }),
       });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        console.error("[AuthContext] Failed to send initial signup OTP:", errData.error || res.statusText);
-      }
     } catch (sendErr) {
       console.error("[AuthContext] Error sending initial signup OTP:", sendErr);
     }
@@ -443,12 +525,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error("No pending registration found for this email address");
     }
 
-    let userId = currentUser?.id;
+    // 1. Try Live Serverless API Endpoint First
     try {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (authUser) userId = authUser.id;
-    } catch (e) {
-      console.warn("[AuthContext] Could not fetch remote session, checking local OTP:", e);
+      const res = await fetch("/api/auth/verify-otp-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code }),
+      });
+      if (res.ok) {
+        const resData = await res.json();
+        if (resData.success && resData.user) {
+          const userObj: User = resData.user;
+          const { password } = profileData;
+          saveLocalAccount({ email: userObj.email, password: password || currentRegState?.profileData?.password, user: userObj });
+          saveActiveSession(userObj);
+          setPendingRegData(null);
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('gogetters_pending_reg');
+          }
+          setCurrentUser(userObj);
+          if (userObj.role === 'admin') await refreshUsers();
+          await refreshLeaders();
+          return userObj;
+        }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        if (errData.error === "Invalid verification code. Please check your email.") {
+          throw new Error("Invalid verification code. Please check your email for the correct code.");
+        }
+      }
+    } catch (apiErr: any) {
+      if (apiErr?.message?.includes("Invalid verification code")) throw apiErr;
+      console.warn("[AuthContext] Live verify OTP endpoint check warning:", apiErr);
     }
 
     if (currentRegState.otpCode && currentRegState.otpCode !== code) {
