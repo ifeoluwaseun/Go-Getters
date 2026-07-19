@@ -99,7 +99,7 @@ import { useEffect } from "react";
 export default function RegisterScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { register, verifyAndCompleteRegister, resendOtp } = useAuth();
+  const { register, verifyAndCompleteRegister, resendOtp, allUsers } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -108,6 +108,20 @@ export default function RegisterScreen() {
   const [sponsorId, setSponsorId] = useState<string | undefined>(undefined);
   const [existingUsers, setExistingUsers] = useState<{ id: string; name: string }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // Combine sponsors from allUsers state and remote DB check
+  const sponsorList = Array.from(
+    new Map(
+      [
+        ...(allUsers || []).filter(u => u.status === 'approved' || u.role === 'admin' || u.role === 'leader').map(u => [u.id, { id: u.id, name: u.name }]),
+        ...(existingUsers || []).map(u => [u.id, { id: u.id, name: u.name }])
+      ]
+    ).values()
+  );
+
+  const filteredSponsors = sponsorName.trim()
+    ? sponsorList.filter(u => u.name.toLowerCase().includes(sponsorName.toLowerCase()))
+    : sponsorList;
   const [adminCode, setAdminCode] = useState("");
   const [showAdminCode, setShowAdminCode] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -410,7 +424,7 @@ export default function RegisterScreen() {
               onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
             />
           </View>
-          {showSuggestions && sponsorName.trim() !== "" && (
+          {showSuggestions && (
             <View style={{
               backgroundColor: colors.card,
               borderColor: colors.border,
@@ -422,35 +436,37 @@ export default function RegisterScreen() {
               zIndex: 50,
             }}>
               <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 180 }}>
-                {existingUsers.filter(u => u.name.toLowerCase().includes(sponsorName.toLowerCase())).length > 0 ? (
-                  existingUsers
-                    .filter(u => u.name.toLowerCase().includes(sponsorName.toLowerCase()))
-                    .map(u => (
-                      <TouchableOpacity
-                        key={u.id}
-                        onPress={() => {
-                          setSponsorName(u.name);
-                          setSponsorId(u.id);
-                          setShowSuggestions(false);
-                        }}
-                        activeOpacity={0.8}
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          paddingHorizontal: 16,
-                          paddingVertical: 12,
-                          borderBottomColor: colors.border,
-                          borderBottomWidth: 1,
-                        }}
-                      >
+                {filteredSponsors.length > 0 ? (
+                  filteredSponsors.map(u => (
+                    <TouchableOpacity
+                      key={u.id}
+                      onPress={() => {
+                        setSponsorName(u.name);
+                        setSponsorId(u.id);
+                        setShowSuggestions(false);
+                      }}
+                      activeOpacity={0.8}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        paddingHorizontal: 16,
+                        paddingVertical: 12,
+                        borderBottomColor: colors.border,
+                        borderBottomWidth: 1,
+                      }}
+                    >
+                      <View style={{ flexDirection: "row", alignItems: "center" }}>
                         <Ionicons name="person-outline" size={14} color={colors.primary} style={{ marginRight: 8 }} />
                         <Text style={{ color: colors.foreground, fontSize: 14 }}>{u.name}</Text>
-                      </TouchableOpacity>
-                    ))
+                      </View>
+                      <Text style={{ color: colors.primary, fontSize: 11, fontFamily: "Inter_600SemiBold" }}>SELECT</Text>
+                    </TouchableOpacity>
+                  ))
                 ) : (
                   <View style={{ padding: 12 }}>
                     <Text style={{ color: colors.mutedForeground, fontSize: 13, fontStyle: "italic" }}>
-                      No matches found. Will use manual text.
+                      {sponsorName.trim() ? "No matching sponsors found. You can enter a name manually." : "No registered sponsors yet. Enter a name manually."}
                     </Text>
                   </View>
                 )}

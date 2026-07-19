@@ -8,7 +8,7 @@ import { UserRole } from "@/types";
 import { supabase } from "@/lib/supabase";
 
 export default function Register() {
-  const { register, verifyAndCompleteRegister, resendOtp, currentUser } = useAuth();
+  const { register, verifyAndCompleteRegister, resendOtp, currentUser, allUsers } = useAuth();
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -20,6 +20,20 @@ export default function Register() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [adminCode, setAdminCode] = useState("");
   const [showAdmin, setShowAdmin] = useState(false);
+
+  // Combine sponsors from allUsers state and remote DB check
+  const sponsorList = Array.from(
+    new Map(
+      [
+        ...(allUsers || []).filter(u => u.status === 'approved' || u.role === 'admin' || u.role === 'leader').map(u => [u.id, { id: u.id, name: u.name }]),
+        ...(existingUsers || []).map(u => [u.id, { id: u.id, name: u.name }])
+      ]
+    ).values()
+  );
+
+  const filteredSponsors = sponsorName.trim()
+    ? sponsorList.filter(u => u.name.toLowerCase().includes(sponsorName.toLowerCase()))
+    : sponsorList;
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -325,27 +339,28 @@ export default function Register() {
                   placeholder="Type to search or enter manually..."
                   className="w-full h-11 bg-background/50 border border-border/80 rounded-lg px-3.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/80 transition-all"
                 />
-                {showSuggestions && sponsorName.trim() && (
+                {showSuggestions && (
                   <div className="absolute z-50 w-full mt-1 bg-[#16171b] border border-border rounded-lg shadow-xl max-h-48 overflow-y-auto">
-                    {existingUsers.filter(u => u.name.toLowerCase().includes(sponsorName.toLowerCase())).length > 0 ? (
-                      existingUsers
-                        .filter(u => u.name.toLowerCase().includes(sponsorName.toLowerCase()))
-                        .map(u => (
-                          <button
-                            key={u.id}
-                            type="button"
-                            onClick={() => {
-                              setSponsorName(u.name);
-                              setSponsorId(u.id);
-                              setShowSuggestions(false);
-                            }}
-                            className="w-full text-left px-4 py-2 hover:bg-white/5 text-sm transition-colors first:rounded-t-lg last:rounded-b-lg font-medium"
-                          >
-                            {u.name}
-                          </button>
-                        ))
+                    {filteredSponsors.length > 0 ? (
+                      filteredSponsors.map(u => (
+                        <button
+                          key={u.id}
+                          type="button"
+                          onClick={() => {
+                            setSponsorName(u.name);
+                            setSponsorId(u.id);
+                            setShowSuggestions(false);
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-white/5 text-sm transition-colors first:rounded-t-lg last:rounded-b-lg font-medium flex items-center justify-between"
+                        >
+                          <span>{u.name}</span>
+                          <span className="text-[10px] uppercase text-primary/70 font-semibold tracking-wider">Select</span>
+                        </button>
+                      ))
                     ) : (
-                      <div className="px-4 py-2 text-xs text-muted-foreground italic">No matches found, will use manual text.</div>
+                      <div className="px-4 py-2 text-xs text-muted-foreground italic">
+                        {sponsorName.trim() ? "No matching sponsors found. You can enter a name manually." : "No registered sponsors yet. Enter a name manually."}
+                      </div>
                     )}
                   </div>
                 )}
