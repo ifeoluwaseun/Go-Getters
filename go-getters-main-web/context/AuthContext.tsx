@@ -569,11 +569,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { name, role, leaderId, leaderName, sponsorId, sponsorName, adminCode, password } = profileData;
     const statusVal = (role === 'admin' || adminCode === 'GOGETTERS2024') ? 'approved' : 'pending';
+    const userPass = password || currentRegState?.profileData?.password || "app_auth_hash";
     
     const dbProfile = {
       id: userId,
       name,
       email: email.toLowerCase(),
+      password_hash: userPass,
       role,
       status: statusVal,
       streak: 0,
