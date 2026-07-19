@@ -33,7 +33,9 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const user = await login(email.trim(), password);
-      if (user && (user.status === 'pending' || user.status === 'rejected')) {
+      if (user && user.status === 'unconfirmed') {
+        router.replace("/(auth)/otp");
+      } else if (user && (user.status === 'pending' || user.status === 'rejected')) {
         router.replace("/pending-approval");
       } else {
         router.replace("/(tabs)");

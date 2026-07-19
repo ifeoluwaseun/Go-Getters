@@ -201,6 +201,7 @@ export default function RegisterScreen() {
       if (user.status === 'unconfirmed') {
         setShowOtpStep(true);
         setResendCooldown(30);
+        router.push("/(auth)/otp");
       } else if (user.status === 'approved') {
         router.replace("/(tabs)");
       } else {
