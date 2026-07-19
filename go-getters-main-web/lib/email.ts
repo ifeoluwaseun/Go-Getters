@@ -1,10 +1,5 @@
 import nodemailer from "nodemailer";
 
-const smtpUser = process.env.SMTP_USER || "akintayojoseph64@gmail.com";
-const smtpPass = process.env.SMTP_PASS || "rzyalejjvxupxczx";
-const resendApiKey = process.env.RESEND_API_KEY;
-const fromEmail = process.env.FROM_EMAIL || "Go-Getters <onboarding@resend.dev>";
-
 export async function sendEmail({
   to,
   subject,
@@ -14,44 +9,62 @@ export async function sendEmail({
   subject: string;
   html: string;
 }) {
+  const smtpUser = process.env.SMTP_USER || "akintayojoseph64@gmail.com";
+  const smtpPass = process.env.SMTP_PASS || "rzyalejjvxupxczx";
+  const resendApiKey = process.env.RESEND_API_KEY;
+  const fromEmail = process.env.FROM_EMAIL || "Go-Getters <onboarding@resend.dev>";
+
   // Determine if we can use Resend.
   // We use Resend if RESEND_API_KEY is configured AND either:
   // - FROM_EMAIL is not the default onboarding@resend.dev sandbox address (implying a custom domain).
   // - The recipient is the sandbox owner (akintayojoseph64@gmail.com).
+  const isSandboxSender = fromEmail.includes("onboarding@resend.dev");
+  const hasCustomSender = !isSandboxSender;
+  
   const canUseResend =
     !!resendApiKey &&
-    (fromEmail !== "Go-Getters <onboarding@resend.dev>" &&
-     fromEmail !== "onboarding@resend.dev" ||
-     to === "akintayojoseph64@gmail.com");
+    (hasCustomSender || to === "akintayojoseph64@gmail.com");
 
-  if (canUseResend) {
-    console.log(`[Email System] Routing email to ${to} via Resend API`);
-    try {
-      const res = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${resendApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: fromEmail,
-          to,
-          subject,
-          html,
-        }),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.message || `Resend API returned status ${res.status}`);
-      }
-
-      const data = await res.json();
-      return data;
-    } catch (error) {
-      console.error("[Email System] Failed to send email via Resend:", error);
-      console.log("[Email System] Falling back to SMTP...");
+  if (resendApiKey) {
+    console.log(`[Email System] Attempting to send email to ${to} via Resend API`);
+    
+    // List of sender addresses to try with Resend API (configured custom sender first, then onboarding@resend.dev)
+    const sendersToTry = [fromEmail];
+    if (!fromEmail.includes("onboarding@resend.dev")) {
+      sendersToTry.push("Go-Getters <onboarding@resend.dev>");
     }
+
+    let sentWithResend = false;
+    for (const sender of sendersToTry) {
+      try {
+        const res = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${resendApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from: sender,
+            to,
+            subject,
+            html,
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          console.log(`[Email System] Successfully sent email to ${to} via Resend API using sender: ${sender}`);
+          return data;
+        }
+
+        const errorData = await res.json().catch(() => ({}));
+        console.warn(`[Email System] Resend attempt with sender '${sender}' returned status ${res.status}:`, errorData.message || errorData);
+      } catch (err) {
+        console.error(`[Email System] Resend fetch error with sender '${sender}':`, err);
+      }
+    }
+
+    console.log("[Email System] Resend API could not deliver to this recipient with available senders. Falling back to SMTP...");
   }
 
   // Fallback / Default Mode: Gmail SMTP via nodemailer

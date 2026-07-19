@@ -61,7 +61,7 @@ export default function Register() {
 
   // Restore pending registration on mount or if unconfirmed session exists
   useEffect(() => {
-    let loadedFromLocal = false;
+    let hasPending = false;
 
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('gogetters_pending_reg');
@@ -69,10 +69,7 @@ export default function Register() {
         try {
           const parsed = JSON.parse(saved);
           if (parsed.email) {
-            setEmail(parsed.email);
-            setRegData(parsed.profileData);
-            setShowOtp(true);
-            loadedFromLocal = true;
+            hasPending = true;
           }
         } catch (e) {
           console.error("Failed to load saved pending registration:", e);
@@ -81,18 +78,7 @@ export default function Register() {
     }
 
     if (currentUser && currentUser.status === "unconfirmed") {
-      if (!loadedFromLocal) {
-        setEmail(currentUser.email);
-        setRegData({
-          name: currentUser.name || "New User",
-          role: currentUser.role || "member",
-          sponsorId: currentUser.sponsorId,
-          sponsorName: currentUser.sponsorName,
-        });
-        setShowOtp(true);
-      }
-
-      // Automatically send a fresh code if there isn't one already in localStorage
+      hasPending = true;
       if (typeof window !== 'undefined') {
         const saved = localStorage.getItem('gogetters_pending_reg');
         if (!saved) {
@@ -102,7 +88,11 @@ export default function Register() {
         }
       }
     }
-  }, [currentUser, resendOtp]);
+
+    if (hasPending) {
+      router.push('/verify-otp');
+    }
+  }, [currentUser, resendOtp, router]);
 
   // Redirect if logged in and approved/pending
   useEffect(() => {
@@ -145,6 +135,7 @@ export default function Register() {
         });
         setShowOtp(true);
         setResendCooldown(30);
+        router.push('/verify-otp');
       }
     } catch (err: any) {
       setError(err?.message || "Registration failed");

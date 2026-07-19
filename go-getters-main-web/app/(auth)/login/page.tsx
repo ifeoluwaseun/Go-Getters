@@ -25,7 +25,7 @@ export default function Login() {
   // Handle Auth Session State Change redirect
   useEffect(() => {
     if (!isLoading && currentUser) {
-      if (currentUser.status === "unconfirmed") router.push("/register");
+      if (currentUser.status === "unconfirmed") router.push("/verify-otp");
       else if (currentUser.status === "pending") router.push("/pending");
       else if (currentUser.status === "rejected") router.push("/rejected");
       else if (currentUser.status === "approved") router.push("/dashboard");
