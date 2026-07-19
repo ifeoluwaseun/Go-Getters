@@ -674,30 +674,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [currentUser]);
 
   const approveUser = useCallback(async (id: string) => {
-    const { error } = await supabase
-      .from('users')
-      .update({ status: 'approved' })
-      .eq('id', id);
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ status: 'approved' })
+        .eq('id', id);
+      if (error) console.warn("Supabase update error:", error.message);
+    } catch (e) {
+      console.warn("Supabase DB offline during approval:", e);
+    }
 
-    if (error) throw error;
+    // Update in local accounts registry
+    const localAccounts = getLocalAccounts();
+    const acc = localAccounts.find(a => a.user.id === id);
+    if (acc) {
+      acc.user.status = 'approved';
+      saveLocalAccount(acc);
+    }
 
     setAllUsers(prev => prev.map(u => u.id === id ? { ...u, status: 'approved' } : u));
     if (currentUser?.id === id) {
-      setCurrentUser(prev => prev ? { ...prev, status: 'approved' } : null);
+      const updated = { ...currentUser, status: 'approved' as const };
+      setCurrentUser(updated);
+      saveActiveSession(updated);
     }
   }, [currentUser]);
 
   const rejectUser = useCallback(async (id: string, reason: string) => {
-    const { error } = await supabase
-      .from('users')
-      .update({ status: 'rejected', rejection_reason: reason })
-      .eq('id', id);
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ status: 'rejected', rejection_reason: reason })
+        .eq('id', id);
+      if (error) console.warn("Supabase rejection error:", error.message);
+    } catch (e) {
+      console.warn("Supabase DB offline during rejection:", e);
+    }
 
-    if (error) throw error;
+    // Update in local accounts registry
+    const localAccounts = getLocalAccounts();
+    const acc = localAccounts.find(a => a.user.id === id);
+    if (acc) {
+      acc.user.status = 'rejected';
+      acc.user.rejectionReason = reason;
+      saveLocalAccount(acc);
+    }
 
     setAllUsers(prev => prev.map(u => u.id === id ? { ...u, status: 'rejected', rejectionReason: reason } : u));
     if (currentUser?.id === id) {
-      setCurrentUser(prev => prev ? { ...prev, status: 'rejected', rejectionReason: reason } : null);
+      const updated = { ...currentUser, status: 'rejected' as const, rejectionReason: reason };
+      setCurrentUser(updated);
+      saveActiveSession(updated);
     }
   }, [currentUser]);
 
@@ -718,17 +745,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (updates.sponsorName !== undefined) dbUpdates.sponsor_name = updates.sponsorName;
     if (updates.rejectionReason !== undefined) dbUpdates.rejection_reason = updates.rejectionReason;
 
-    const { error } = await supabase
-      .from('users')
-      .update(dbUpdates)
-      .eq('id', userId);
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update(dbUpdates)
+        .eq('id', userId);
+      if (error) console.warn("Supabase admin update error:", error.message);
+    } catch (e) {
+      console.warn("Supabase DB offline during admin user update:", e);
+    }
 
-    if (error) throw error;
+    // Update in local accounts registry
+    const localAccounts = getLocalAccounts();
+    const acc = localAccounts.find(a => a.user.id === userId);
+    if (acc) {
+      acc.user = { ...acc.user, ...updates };
+      saveLocalAccount(acc);
+    }
 
     const partialUpdate = { ...updates };
     setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, ...partialUpdate } : u));
     if (currentUser?.id === userId) {
-      setCurrentUser(prev => prev ? { ...prev, ...partialUpdate } : null);
+      const updated = { ...currentUser, ...partialUpdate };
+      setCurrentUser(updated);
+      saveActiveSession(updated);
     }
   }, [currentUser]);
 
