@@ -244,7 +244,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string): Promise<User> => {
     const cleanEmail = email.trim().toLowerCase();
 
-    // 1. Try Supabase Auth
+    // 1. Check local accounts registry FIRST
+    const localAccounts = getLocalAccounts();
+    const match = localAccounts.find(acc => acc.email.toLowerCase() === cleanEmail);
+
+    if (match) {
+      if (match.password && match.password !== password) {
+        throw new Error("Invalid password");
+      }
+      setCurrentUser(match.user);
+      saveActiveSession(match.user);
+      await refreshLeaders();
+      return match.user;
+    }
+
+    // 2. Try Supabase Auth
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
       if (!error && data?.user) {
@@ -279,21 +293,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     } catch (err) {
-      console.warn("[AuthContext] Remote login failed/offline, checking local account store:", err);
-    }
-
-    // 2. Fallback to local accounts store
-    const localAccounts = getLocalAccounts();
-    const match = localAccounts.find(acc => acc.email.toLowerCase() === cleanEmail);
-
-    if (match) {
-      if (match.password && match.password !== password) {
-        throw new Error("Invalid password");
-      }
-      setCurrentUser(match.user);
-      saveActiveSession(match.user);
-      await refreshLeaders();
-      return match.user;
+      console.warn("[AuthContext] Remote login failed/offline:", err);
     }
 
     throw new Error("Invalid email or password. Please check your credentials.");
@@ -511,59 +511,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('gogetters_pending_reg');
     }
-
-    setCurrentUser(userObj);
-    if (userObj.role === 'admin') await refreshUsers();
-    await refreshLeaders();
-    return userObj;
-  }, [pendingRegData, currentUser, refreshUsers, refreshLeaders]);
-
-    // Clear local storage pending registration
-    setPendingRegData(null);
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('gogetters_pending_reg');
-    }
-
-    // Notify organization owner/admins of the new registration
-    try {
-      const { data: admins } = await supabase
-        .from('users')
-        .select('id')
-        .eq('role', 'admin');
-      
-      if (admins && admins.length > 0) {
-        const notificationsToInsert = admins.map(admin => ({
-          id: Math.random().toString(36).substring(2) + Date.now().toString(36),
-          user_id: admin.id,
-          type: 'announcement',
-          title: 'New Registration',
-          body: `${name} has registered. Please assign a team leader.`,
-          is_read: false,
-          level: 2,
-          created_at: new Date().toISOString(),
-        }));
-        await supabase.from('notifications').insert(notificationsToInsert);
-      }
-    } catch (notifErr) {
-      console.error("Failed to notify admins of new registration:", notifErr);
-    }
-
-    const userObj: User = {
-      id: dbProfile.id,
-      name: dbProfile.name,
-      email: dbProfile.email,
-      role: dbProfile.role as UserRole,
-      status: dbProfile.status as UserStatus,
-      streak: 0,
-      points: 0,
-      completionRate: 0,
-      consistency: 0,
-      joinedAt: dbProfile.joined_at,
-      leaderId: dbProfile.leader_id || undefined,
-      leaderName: dbProfile.leader_name || undefined,
-      sponsorId: dbProfile.sponsor_id || undefined,
-      sponsorName: dbProfile.sponsor_name || undefined,
-    };
 
     setCurrentUser(userObj);
     if (userObj.role === 'admin') await refreshUsers();

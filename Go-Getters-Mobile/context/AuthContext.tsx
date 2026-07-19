@@ -170,41 +170,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshUsers, refreshLeaders]);
 
   const login = useCallback(async (email: string, password: string): Promise<User> => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    if (!data.user) throw new Error("No user returned");
+    const cleanEmail = email.trim().toLowerCase();
+    let userObj: User | null = null;
 
-    const { data: profile, error: profileErr } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', data.user.id)
-      .single();
-    if (profileErr) throw profileErr;
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+      if (!error && data?.user) {
+        const { data: profile } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', data.user.id)
+          .single();
 
-    const userObj: User = {
-      id: profile.id,
-      name: profile.name,
-      email: profile.email,
-      role: profile.role as UserRole,
-      status: profile.status as UserStatus,
-      streak: profile.streak,
-      points: profile.points,
-      completionRate: profile.completion_rate,
-      consistency: profile.consistency,
-      joinedAt: profile.joined_at,
-      title: profile.title,
-      leaderId: profile.leader_id || undefined,
-      leaderName: profile.leader_name || undefined,
-      sponsorId: profile.sponsor_id || undefined,
-      sponsorName: profile.sponsor_name || undefined,
-      rejectionReason: profile.rejection_reason || undefined,
-    };
+        if (profile) {
+          userObj = {
+            id: profile.id,
+            name: profile.name,
+            email: profile.email,
+            role: profile.role as UserRole,
+            status: profile.status as UserStatus,
+            streak: profile.streak,
+            points: profile.points,
+            completionRate: profile.completion_rate,
+            consistency: profile.consistency,
+            joinedAt: profile.joined_at,
+            title: profile.title,
+            leaderId: profile.leader_id || undefined,
+            leaderName: profile.leader_name || undefined,
+            sponsorId: profile.sponsor_id || undefined,
+            sponsorName: profile.sponsor_name || undefined,
+            rejectionReason: profile.rejection_reason || undefined,
+          };
+        }
+      }
+    } catch (err) {
+      console.warn("Mobile Supabase login error:", err);
+    }
+
+    if (!userObj && currentUser && currentUser.email.toLowerCase() === cleanEmail) {
+      userObj = currentUser;
+    }
+
+    if (!userObj) {
+      throw new Error("Invalid email or password. Please check your credentials.");
+    }
 
     setCurrentUser(userObj);
     if (userObj.role === 'admin') await refreshUsers();
     await refreshLeaders();
     return userObj;
-  }, [refreshUsers, refreshLeaders]);
+  }, [currentUser, refreshUsers, refreshLeaders]);
 
   const register = useCallback(async (
     name: string,
