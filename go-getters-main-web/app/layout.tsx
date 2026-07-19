@@ -11,6 +11,11 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Go-Getters | High-Performance Execution System",
   description: "Join the elite execution network. Organize your goals, track daily tasks, upload progress evidence, and rise on the community win board.",
+  icons: {
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({
@@ -21,6 +26,8 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark scroll-smooth" suppressHydrationWarning>
       <head>
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/favicon.svg" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
