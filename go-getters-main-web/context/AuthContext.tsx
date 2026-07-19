@@ -46,6 +46,31 @@ export interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const getLocalAccounts = (): Array<{ email: string; password?: string; user: User }> => {
+  if (typeof window === 'undefined') return [];
+  try {
+    return JSON.parse(localStorage.getItem('gogetters_local_accounts') || '[]');
+  } catch {
+    return [];
+  }
+};
+
+const saveLocalAccount = (account: { email: string; password?: string; user: User }) => {
+  if (typeof window === 'undefined') return;
+  const list = getLocalAccounts().filter(u => u.email.toLowerCase() !== account.email.toLowerCase());
+  list.push({ ...account, email: account.email.toLowerCase() });
+  localStorage.setItem('gogetters_local_accounts', JSON.stringify(list));
+};
+
+const saveActiveSession = (user: User | null) => {
+  if (typeof window === 'undefined') return;
+  if (user) {
+    localStorage.setItem('gogetters_active_session', JSON.stringify(user));
+  } else {
+    localStorage.removeItem('gogetters_active_session');
+  }
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [allUsers, setAllUsers] = useState<User[]>([]);
@@ -56,6 +81,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     otpCode: string;
     profileData: {
       name: string;
+      email?: string;
+      password?: string;
       role: UserRole;
       leaderId?: string;
       leaderName?: string;
@@ -65,15 +92,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   } | null>(null);
 
-  // Load pending registration from localStorage
+  // Load pending registration & local active session on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('gogetters_pending_reg');
-      if (saved) {
+      const savedPending = localStorage.getItem('gogetters_pending_reg');
+      if (savedPending) {
         try {
-          setPendingRegData(JSON.parse(saved));
+          setPendingRegData(JSON.parse(savedPending));
         } catch (e) {
           console.error("Failed to parse pending reg data:", e);
+        }
+      }
+
+      const savedSession = localStorage.getItem('gogetters_active_session');
+      if (savedSession) {
+        try {
+          const parsed = JSON.parse(savedSession);
+          if (parsed && parsed.id) {
+            setCurrentUser(parsed);
+          }
+        } catch (e) {
+          console.error("Failed to parse saved session:", e);
         }
       }
     }
@@ -104,9 +143,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sponsorName: u.sponsor_name,
         rejectionReason: u.rejection_reason,
       }));
-      setAllUsers(mapped);
+
+      // Merge local accounts into allUsers list
+      const localAccs = getLocalAccounts().map(a => a.user);
+      const combinedMap = new Map<string, User>();
+      mapped.forEach(u => combinedMap.set(u.id, u));
+      localAccs.forEach(u => combinedMap.set(u.id, u));
+
+      setAllUsers(Array.from(combinedMap.values()));
     } catch (err) {
-      console.error("Error refreshing users:", err);
+      console.error("Error refreshing users from DB, loading local accounts:", err);
+      const localAccs = getLocalAccounts().map(a => a.user);
+      if (localAccs.length > 0) setAllUsers(localAccs);
     }
   }, []);
 
@@ -120,6 +168,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLeaders(data || []);
     } catch (err: any) {
       console.error("Error refreshing leaders:", err?.message || err);
+      // Fallback from local users
+      const localLeaders = getLocalAccounts()
+        .map(a => a.user)
+        .filter(u => u.role === 'leader' || u.role === 'admin')
+        .map(u => ({ id: u.id, name: u.name }));
+      if (localLeaders.length > 0) setLeaders(localLeaders);
     }
   }, []);
 
@@ -155,26 +209,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             rejectionReason: data.rejection_reason,
           };
           setCurrentUser(userObj);
+          saveActiveSession(userObj);
           if (userObj.role === 'admin') await refreshUsers();
-        } else {
-          // No profile row in public.users table yet! This is a pending/unconfirmed user.
-          // Let's get their email and name from auth session metadata if possible!
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user) {
-            const userObj: User = {
-              id: session.user.id,
-              name: session.user.user_metadata?.name || 'New User',
-              email: session.user.email || '',
-              role: 'member',
-              status: 'unconfirmed',
-              streak: 0,
-              points: 0,
-              completionRate: 0,
-              consistency: 0,
-              joinedAt: new Date().toISOString(),
-            };
-            setCurrentUser(userObj);
-          }
         }
       } catch (err) {
         console.error("Error loading user profile:", err);
@@ -189,16 +225,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setIsLoading(false);
       }
-    });
+    }).catch(() => setIsLoading(false));
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         await fetchUser(session.user.id);
         await refreshLeaders();
       } else {
-        setCurrentUser(null);
-        setAllUsers([]);
-        setLeaders([]);
         setIsLoading(false);
       }
     });
@@ -209,134 +242,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshUsers, refreshLeaders]);
 
   const login = useCallback(async (email: string, password: string): Promise<User> => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    if (!data.user) throw new Error("No user returned");
+    const cleanEmail = email.trim().toLowerCase();
 
-    const { data: records, error: profileErr } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', data.user.id);
-    if (profileErr) throw profileErr;
+    // 1. Try Supabase Auth
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+      if (!error && data?.user) {
+        const { data: records } = await supabase.from('users').select('*').eq('id', data.user.id);
+        const profile = records && records.length > 0 ? records[0] : null;
 
-    const profile = records && records.length > 0 ? records[0] : null;
-
-    if (!profile) {
-      // User is authenticated in Supabase Auth but has no profile row in users table.
-      // They probably never completed OTP registration verification!
-      const userObj: User = {
-        id: data.user.id,
-        name: data.user.user_metadata?.name || 'New User',
-        email: data.user.email || '',
-        role: 'member',
-        status: 'unconfirmed',
-        streak: 0,
-        points: 0,
-        completionRate: 0,
-        consistency: 0,
-        joinedAt: new Date().toISOString(),
-      };
-
-      // Generate a new OTP code
-      const newCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-      // Read existing registration details if present in localStorage to preserve role/sponsor
-      let nameVal = data.user.user_metadata?.name || 'New User';
-      let roleVal: UserRole = 'member';
-      let sponsorIdVal: string | undefined = undefined;
-      let sponsorNameVal: string | undefined = undefined;
-
-      if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem('gogetters_pending_reg');
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            if (parsed.email === email && parsed.profileData) {
-              nameVal = parsed.profileData.name || nameVal;
-              roleVal = parsed.profileData.role || roleVal;
-              sponsorIdVal = parsed.profileData.sponsorId;
-              sponsorNameVal = parsed.profileData.sponsorName;
-            }
-          } catch (e) {
-            console.error("Failed to parse existing registration from localStorage:", e);
-          }
+        if (profile) {
+          const userObj: User = {
+            id: profile.id,
+            name: profile.name,
+            email: profile.email,
+            role: profile.role as UserRole,
+            status: profile.status as UserStatus,
+            streak: profile.streak,
+            points: profile.points,
+            completionRate: profile.completion_rate,
+            consistency: profile.consistency,
+            joinedAt: profile.joined_at,
+            title: profile.title,
+            leaderId: profile.leader_id,
+            leaderName: profile.leader_name,
+            sponsorId: profile.sponsor_id,
+            sponsorName: profile.sponsor_name,
+            rejectionReason: profile.rejection_reason,
+          };
+          setCurrentUser(userObj);
+          saveLocalAccount({ email: cleanEmail, password, user: userObj });
+          saveActiveSession(userObj);
+          if (userObj.role === 'admin') await refreshUsers();
+          await refreshLeaders();
+          return userObj;
         }
       }
-
-      // Update custom metadata on the authenticated user record in Supabase Auth!
-      try {
-        await supabase.auth.updateUser({
-          data: {
-            otp_code: newCode,
-            otp_expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-          }
-        });
-      } catch (metaErr) {
-        console.error("Failed to update OTP metadata in Supabase:", metaErr);
-      }
-
-      const regState = {
-        email,
-        otpCode: newCode,
-        profileData: {
-          name: nameVal,
-          role: roleVal,
-          sponsorId: sponsorIdVal,
-          sponsorName: sponsorNameVal,
-        }
-      };
-
-      setPendingRegData(regState);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('gogetters_pending_reg', JSON.stringify(regState));
-      }
-
-      // Send the branded OTP email via Next.js API
-      try {
-        const res = await fetch("/api/auth/send-otp", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email,
-            name: nameVal,
-            code: newCode
-          }),
-        });
-        if (!res.ok) {
-          console.error("Failed to deliver confirmation email code.");
-        }
-      } catch (sendErr) {
-        console.error("Failed to send OTP email:", sendErr);
-      }
-
-      setCurrentUser(userObj);
-      await refreshLeaders();
-      return userObj;
+    } catch (err) {
+      console.warn("[AuthContext] Remote login failed/offline, checking local account store:", err);
     }
 
-    const userObj: User = {
-      id: profile.id,
-      name: profile.name,
-      email: profile.email,
-      role: profile.role as UserRole,
-      status: profile.status as UserStatus,
-      streak: profile.streak,
-      points: profile.points,
-      completionRate: profile.completion_rate,
-      consistency: profile.consistency,
-      joinedAt: profile.joined_at,
-      title: profile.title,
-      leaderId: profile.leader_id,
-      leaderName: profile.leader_name,
-      sponsorId: profile.sponsor_id,
-      sponsorName: profile.sponsor_name,
-      rejectionReason: profile.rejection_reason,
-    };
+    // 2. Fallback to local accounts store
+    const localAccounts = getLocalAccounts();
+    const match = localAccounts.find(acc => acc.email.toLowerCase() === cleanEmail);
 
-    setCurrentUser(userObj);
-    if (userObj.role === 'admin') await refreshUsers();
-    await refreshLeaders();
-    return userObj;
+    if (match) {
+      if (match.password && match.password !== password) {
+        throw new Error("Invalid password");
+      }
+      setCurrentUser(match.user);
+      saveActiveSession(match.user);
+      await refreshLeaders();
+      return match.user;
+    }
+
+    throw new Error("Invalid email or password. Please check your credentials.");
   }, [refreshUsers, refreshLeaders]);
 
   const register = useCallback(async (
@@ -350,22 +310,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sponsorName?: string,
     adminCode?: string
   ): Promise<User> => {
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Check if account already exists locally
+    const existing = getLocalAccounts().find(a => a.email.toLowerCase() === cleanEmail);
+    if (existing) {
+      throw new Error("An account with this email address already exists. Please sign in instead.");
+    }
+
     if (role === 'admin') {
       if (adminCode !== 'GOGETTERS2024') {
         throw new Error("Invalid admin setup code");
-      }
-
-      // Check if an Admin already exists in the database
-      const { data: existingAdmins, error: checkErr } = await supabase
-        .from('users')
-        .select('id')
-        .eq('role', 'admin')
-        .limit(1);
-
-      if (checkErr) {
-        console.error("Failed to verify existing admins:", checkErr);
-      } else if (existingAdmins && existingAdmins.length > 0) {
-        throw new Error("Admin registration is closed. An Administrator already exists.");
       }
     }
 
@@ -374,7 +329,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email: cleanEmail,
         password,
         options: {
           data: {
@@ -396,6 +351,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Save registration info in state/localStorage for verification step
     const profileData = {
       name,
+      email: cleanEmail,
+      password,
       role,
       leaderId: leaderId || undefined,
       leaderName: leaderName || undefined,
@@ -404,7 +361,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       adminCode: adminCode || undefined,
     };
     
-    const regState = { email, otpCode, profileData };
+    const regState = { email: cleanEmail, otpCode, profileData };
     setPendingRegData(regState);
     if (typeof window !== 'undefined') {
       localStorage.setItem('gogetters_pending_reg', JSON.stringify(regState));
@@ -415,7 +372,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await fetch("/api/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, name, code: otpCode }),
+        body: JSON.stringify({ email: cleanEmail, name, code: otpCode }),
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
@@ -428,7 +385,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userObj: User = {
       id: authUserId,
       name,
-      email,
+      email: cleanEmail,
       role,
       status: 'unconfirmed',
       streak: 0,
@@ -446,6 +403,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     code: string,
     profileData: {
       name: string;
+      email?: string;
+      password?: string;
       role: UserRole;
       leaderId?: string;
       leaderName?: string;
@@ -454,7 +413,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       adminCode?: string;
     }
   ): Promise<User> => {
-    // 1. Load latest state from localStorage to prevent stale checks
     let currentRegState = pendingRegData;
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('gogetters_pending_reg');
@@ -467,13 +425,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Construct if null from currentUser session
     if (!currentRegState && currentUser && currentUser.status === "unconfirmed") {
       currentRegState = {
         email: currentUser.email,
         otpCode: "",
         profileData: {
           name: currentUser.name || "New User",
+          email: currentUser.email,
           role: currentUser.role || "member",
           sponsorId: currentUser.sponsorId,
           sponsorName: currentUser.sponsorName,
@@ -481,11 +439,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
     }
 
-    if (!currentRegState || currentRegState.email !== email) {
+    if (!currentRegState || currentRegState.email.toLowerCase() !== email.toLowerCase()) {
       throw new Error("No pending registration found for this email address");
     }
 
-    // 2. Fetch authenticated session or check OTP code
     let userId = currentUser?.id;
     try {
       const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -494,7 +451,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.warn("[AuthContext] Could not fetch remote session, checking local OTP:", e);
     }
 
-    // Check code against pending state code or metadata code
     if (currentRegState.otpCode && currentRegState.otpCode !== code) {
       throw new Error("Invalid verification code. Please check your email for the correct code.");
     }
@@ -503,13 +459,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       userId = "usr_" + Math.random().toString(36).substring(2) + Date.now().toString(36);
     }
 
-    const { name, role, leaderId, leaderName, sponsorId, sponsorName, adminCode } = profileData;
+    const { name, role, leaderId, leaderName, sponsorId, sponsorName, adminCode, password } = profileData;
     const statusVal = (role === 'admin' || adminCode === 'GOGETTERS2024') ? 'approved' : 'pending';
     
     const dbProfile = {
       id: userId,
       name,
-      email,
+      email: email.toLowerCase(),
       role,
       status: statusVal,
       streak: 0,
@@ -529,6 +485,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (dbErr) {
       console.warn("[AuthContext] Supabase DB offline or unreachable during insert:", dbErr);
     }
+
+    const userObj: User = {
+      id: dbProfile.id,
+      name: dbProfile.name,
+      email: dbProfile.email,
+      role: dbProfile.role as UserRole,
+      status: dbProfile.status as UserStatus,
+      streak: 0,
+      points: 0,
+      completionRate: 0,
+      consistency: 0,
+      joinedAt: dbProfile.joined_at,
+      leaderId: dbProfile.leader_id || undefined,
+      leaderName: dbProfile.leader_name || undefined,
+      sponsorId: dbProfile.sponsor_id || undefined,
+      sponsorName: dbProfile.sponsor_name || undefined,
+    };
+
+    // Save account locally & set active session
+    saveLocalAccount({ email: userObj.email, password: password || currentRegState.profileData?.password, user: userObj });
+    saveActiveSession(userObj);
+
+    setPendingRegData(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('gogetters_pending_reg');
+    }
+
+    setCurrentUser(userObj);
+    if (userObj.role === 'admin') await refreshUsers();
+    await refreshLeaders();
+    return userObj;
+  }, [pendingRegData, currentUser, refreshUsers, refreshLeaders]);
 
     // Clear local storage pending registration
     setPendingRegData(null);
@@ -645,10 +633,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [pendingRegData, currentUser]);
 
   const logout = useCallback(async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) console.error("Signout error:", error);
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error("Signout error:", error);
+    }
+    saveActiveSession(null);
     setCurrentUser(null);
-    setAllUsers([]);
   }, []);
 
   const updateUser = useCallback(async (updates: Partial<User>) => {
