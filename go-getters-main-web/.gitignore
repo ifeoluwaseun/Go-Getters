@@ -37,8 +37,10 @@ yarn-error.log*
 .vercel
 
 # scratch
+# scratch
 /scratch
 .data-server-store.json
+pnpm-lock.yaml
 
 # typescript
 *.tsbuildinfo

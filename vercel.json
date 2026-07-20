@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd go-getters-main-web && npm run build",
+  "outputDirectory": "go-getters-main-web/.next",
+  "framework": "nextjs"
+}
