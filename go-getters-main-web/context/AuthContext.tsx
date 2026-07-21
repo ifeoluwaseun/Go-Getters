@@ -579,6 +579,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (resData.success && resData.user) {
           const userObj: User = resData.user;
           const { password } = profileData;
+
+          // Double save to live Supabase database for absolute safety/resilience
+          const userPass = password || currentRegState?.profileData?.password || "app_auth_hash";
+          const dbProfile = {
+            id: userObj.id,
+            name: userObj.name,
+            email: userObj.email.toLowerCase(),
+            password_hash: userPass,
+            role: userObj.role,
+            status: userObj.status,
+            streak: 0,
+            points: 0,
+            completion_rate: 0,
+            consistency: 0,
+            joined_at: userObj.joinedAt || new Date().toISOString(),
+            leader_id: userObj.leaderId || null,
+            leader_name: userObj.leaderName || null,
+            sponsor_id: userObj.sponsorId || null,
+            sponsor_name: userObj.sponsorName || null,
+          };
+
+          try {
+            const { error: insertErr } = await supabase.from('users').insert(dbProfile);
+            if (insertErr) {
+              console.warn("[AuthContext] Client-side fallback insert returned:", insertErr.message);
+            }
+          } catch (dbErr) {
+            console.warn("[AuthContext] Client-side Supabase offline/error during insert:", dbErr);
+          }
+
           saveLocalAccount({ email: userObj.email, password: password || currentRegState?.profileData?.password, user: userObj });
           saveActiveSession(userObj);
           setPendingRegData(null);

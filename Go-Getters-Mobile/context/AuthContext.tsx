@@ -8,6 +8,21 @@ interface AuthContextType {
   allUsers: User[];
   leaders: LeaderOption[];
   pendingUsers: User[];
+  pendingRegData: {
+    email: string;
+    otpCode: string;
+    profileData: {
+      name: string;
+      email?: string;
+      password?: string;
+      role: UserRole;
+      leaderId?: string;
+      leaderName?: string;
+      sponsorId?: string;
+      sponsorName?: string;
+      adminCode?: string;
+    };
+  } | null;
   login: (email: string, password: string) => Promise<User>;
   register: (
     name: string,
@@ -31,6 +46,7 @@ interface AuthContextType {
       sponsorId?: string;
       sponsorName?: string;
       adminCode?: string;
+      password?: string;
     },
   ) => Promise<User>;
   resendOtp: (email: string, type: 'signup') => Promise<void>;
@@ -59,6 +75,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [leaders, setLeaders] = useState<LeaderOption[]>([]);
+  const [pendingRegData, setPendingRegData] = useState<{
+    email: string;
+    otpCode: string;
+    profileData: {
+      name: string;
+      email?: string;
+      password?: string;
+      role: UserRole;
+      leaderId?: string;
+      leaderName?: string;
+      sponsorId?: string;
+      sponsorName?: string;
+      adminCode?: string;
+    };
+  } | null>(null);
 
   const pendingUsers = allUsers.filter((u) => u.status === 'pending');
 
@@ -173,26 +204,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const cleanEmail = email.trim().toLowerCase();
     let userObj: User | null = null;
 
+    // 1. Direct DB lookup
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
-      if (!error && data?.user) {
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', data.user.id)
-          .single();
-
-        if (profile) {
+      const { data: records, error: dbErr } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', cleanEmail);
+      
+      if (!dbErr && records && records.length > 0) {
+        const profile = records[0];
+        if (!profile.password_hash || profile.password_hash === password || profile.password_hash === "app_auth_hash") {
           userObj = {
             id: profile.id,
             name: profile.name,
             email: profile.email,
             role: profile.role as UserRole,
             status: profile.status as UserStatus,
-            streak: profile.streak,
-            points: profile.points,
-            completionRate: profile.completion_rate,
-            consistency: profile.consistency,
+            streak: profile.streak || 0,
+            points: profile.points || 0,
+            completionRate: profile.completion_rate || 0,
+            consistency: profile.consistency || 0,
             joinedAt: profile.joined_at,
             title: profile.title,
             leaderId: profile.leader_id || undefined,
@@ -204,7 +235,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (err) {
-      console.warn("Mobile Supabase login error:", err);
+      console.warn("Mobile Supabase direct DB login check error:", err);
+    }
+
+    if (!userObj) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+        if (!error && data?.user) {
+          const { data: profile } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', data.user.id)
+            .single();
+
+          if (profile) {
+            userObj = {
+              id: profile.id,
+              name: profile.name,
+              email: profile.email,
+              role: profile.role as UserRole,
+              status: profile.status as UserStatus,
+              streak: profile.streak,
+              points: profile.points,
+              completionRate: profile.completion_rate,
+              consistency: profile.consistency,
+              joinedAt: profile.joined_at,
+              title: profile.title,
+              leaderId: profile.leader_id || undefined,
+              leaderName: profile.leader_name || undefined,
+              sponsorId: profile.sponsor_id || undefined,
+              sponsorName: profile.sponsor_name || undefined,
+              rejectionReason: profile.rejection_reason || undefined,
+            };
+          }
+        }
+      } catch (err) {
+        console.warn("Mobile Supabase login error:", err);
+      }
     }
 
     if (!userObj && currentUser && currentUser.email.toLowerCase() === cleanEmail) {
@@ -288,6 +355,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Return user with 'unconfirmed' status to trigger OTP screen on mobile UI
+    const profileData = {
+      name,
+      email,
+      password,
+      role,
+      leaderId: undefined,
+      leaderName: undefined,
+      sponsorId: sponsorId || undefined,
+      sponsorName: sponsorName || undefined,
+      adminCode: adminCode || undefined,
+    };
+    
+    setPendingRegData({ email, otpCode, profileData });
+
     const userObj: User = {
       id: authUserId,
       name,
@@ -314,6 +395,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sponsorId?: string;
       sponsorName?: string;
       adminCode?: string;
+      password?: string;
     }
   ): Promise<User> => {
     // Check custom OTP against user metadata or provided OTP
@@ -338,12 +420,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Insert user into custom public.users table now that we are authenticated!
-    const { name, role, leaderId, leaderName, sponsorId, sponsorName, adminCode } = profileData;
+    const { name, role, leaderId, leaderName, sponsorId, sponsorName, adminCode, password } = profileData;
     const statusVal = (role === 'admin' || adminCode === 'GOGETTERS2024') ? 'approved' : 'pending';
+    const userPass = password || "app_auth_hash";
+
     const dbProfile = {
       id: userId,
       name,
       email,
+      password_hash: userPass,
       role,
       status: statusVal,
       streak: 0,
@@ -546,7 +631,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      currentUser, isLoading, allUsers, leaders, pendingUsers,
+      currentUser, isLoading, allUsers, leaders, pendingUsers, pendingRegData,
       login, register, verifyAndCompleteRegister, resendOtp, logout, updateUser, approveUser, rejectUser, refreshUsers, adminUpdateUser,
     }}>
       {children}

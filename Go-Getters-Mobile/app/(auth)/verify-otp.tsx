@@ -12,7 +12,7 @@ import { useAuth } from "@/context/AuthContext";
 export default function VerifyOtpScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { verifyAndCompleteRegister, resendOtp, currentUser } = useAuth();
+  const { verifyAndCompleteRegister, resendOtp, currentUser, pendingRegData } = useAuth();
 
   const [otpCode, setOtpCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -21,7 +21,7 @@ export default function VerifyOtpScreen() {
   const topPad = Platform.OS === "web" ? 20 : insets.top;
   const botPad = Platform.OS === "web" ? 34 : insets.bottom;
 
-  const email = currentUser?.email || "";
+  const email = pendingRegData?.email || currentUser?.email || "";
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -42,10 +42,11 @@ export default function VerifyOtpScreen() {
     setLoading(true);
     try {
       const user = await verifyAndCompleteRegister(email, otpCode.trim(), {
-        name: currentUser?.name || "New User",
-        role: currentUser?.role || "member",
-        sponsorId: currentUser?.sponsorId,
-        sponsorName: currentUser?.sponsorName,
+        name: pendingRegData?.profileData?.name || currentUser?.name || "New User",
+        role: pendingRegData?.profileData?.role || currentUser?.role || "member",
+        sponsorId: pendingRegData?.profileData?.sponsorId || currentUser?.sponsorId,
+        sponsorName: pendingRegData?.profileData?.sponsorName || currentUser?.sponsorName,
+        password: pendingRegData?.profileData?.password,
       });
 
       if (user.status === 'approved') {
