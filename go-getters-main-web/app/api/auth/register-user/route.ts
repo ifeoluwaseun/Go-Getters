@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { saveServerUser, getServerUserByEmail } from "@/lib/serverStore";
 import { sendRegistrationOtpEmail } from "@/lib/email";
 import { User, UserRole } from "@/types";
+import { createClient } from "@supabase/supabase-js";
 
 export async function POST(request: Request) {
   try {
@@ -24,7 +25,33 @@ export async function POST(request: Request) {
     }
 
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const userId = existing?.user?.id || "usr_" + Math.random().toString(36).substring(2) + Date.now().toString(36);
+    let userId = existing?.user?.id || "usr_" + Math.random().toString(36).substring(2) + Date.now().toString(36);
+
+    // Sign up in Supabase Auth to guarantee the user is created in Auth schema
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://xbeyycvhatzyoqilqjqi.supabase.co";
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhiZXl5Y3ZoYXR6eW9xaWxxanFpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ0OTUyODYsImV4cCI6MjEwMDA3MTI4Nn0.85mnkV7X2q4_JpkyxNID09-s4QOSp1Buqac9sh3qPZc";
+      const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+      const { data: authData, error: authErr } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password,
+        options: {
+          data: {
+            name,
+            otp_code: otpCode,
+            otp_expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          }
+        }
+      });
+      if (authErr) {
+        console.warn("[Register API] Supabase auth signUp warning:", authErr.message);
+      } else if (authData?.user) {
+        userId = authData.user.id;
+      }
+    } catch (authErr) {
+      console.warn("[Register API] Supabase auth signUp exception:", authErr);
+    }
 
     const userObj: User = {
       id: userId,

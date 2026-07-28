@@ -59,12 +59,15 @@ export async function POST(request: Request) {
     try {
       const { error: insertErr } = await supabase.from('users').insert(dbProfile);
       if (insertErr) {
-        console.error("[Verify OTP API] Supabase database insert failed:", insertErr.message, insertErr);
+        console.error("[Verify OTP API] Supabase database insert failed for user:", cleanEmail);
+        console.error("- Error Message:", insertErr.message);
+        console.error("- Full Error Object:", JSON.stringify(insertErr, null, 2));
+        console.error("- Payload:", JSON.stringify(dbProfile, null, 2));
       } else {
         console.log("[Verify OTP API] User successfully saved to Supabase:", cleanEmail);
       }
     } catch (dbErr) {
-      console.error("[Verify OTP API] Supabase offline/error during insert:", dbErr);
+      console.error("[Verify OTP API] Supabase offline/error during insert for user:", cleanEmail, dbErr);
     }
 
     return NextResponse.json({ success: true, user: updatedUser });

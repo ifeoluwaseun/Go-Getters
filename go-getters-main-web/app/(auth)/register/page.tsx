@@ -23,10 +23,10 @@ export default function Register() {
 
   // Combine sponsors from allUsers state and remote DB check
   const sponsorList = Array.from(
-    new Map(
+    new Map<string, { id: string; name: string }>(
       [
-        ...(allUsers || []).filter(u => u.status === 'approved' || u.role === 'admin' || u.role === 'leader').map(u => [u.id, { id: u.id, name: u.name }]),
-        ...(existingUsers || []).map(u => [u.id, { id: u.id, name: u.name }])
+        ...(allUsers || []).filter(u => u.status === 'approved' || u.role === 'admin' || u.role === 'leader').map(u => [u.id, { id: u.id, name: u.name }] as [string, { id: string; name: string }]),
+        ...(existingUsers || []).map(u => [u.id, { id: u.id, name: u.name }] as [string, { id: string; name: string }])
       ]
     ).values()
   );

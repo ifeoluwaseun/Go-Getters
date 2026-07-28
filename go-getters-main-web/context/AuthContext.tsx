@@ -600,6 +600,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             sponsor_name: userObj.sponsorName || null,
           };
 
+          // Authenticate the client session in Supabase Auth before performing insert
+          try {
+            await supabase.auth.signInWithPassword({
+              email: userObj.email,
+              password: userPass,
+            });
+          } catch (authErr) {
+            console.warn("[AuthContext] Client-side sign-in before insert failed/warning:", authErr);
+          }
+
           try {
             const { error: insertErr } = await supabase.from('users').insert(dbProfile);
             if (insertErr) {
@@ -633,6 +643,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (currentRegState.otpCode && currentRegState.otpCode !== code) {
       throw new Error("Invalid verification code. Please check your email for the correct code.");
+    }
+
+    let userId = currentUser?.id;
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        userId = authUser.id;
+      }
+    } catch (e) {
+      console.warn("[AuthContext] Could not fetch remote session, verifying locally:", e);
     }
 
     if (!userId) {
